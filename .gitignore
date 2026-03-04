@@ -32,3 +32,6 @@ venv.bak/
 
 # Files
 database_test.py
+
+# OS
+*.DS_Store*
