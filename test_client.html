@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dutch Blitz WebSocket Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #1e1e1e; color: white; }
+        input, button { padding: 10px; margin: 5px; }
+        #messages { border: 1px solid #444; padding: 10px; height: 300px; overflow-y: scroll; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h2>Lobby Test</h2>
+    
+    <div>
+        <input type="text" id="roomCode" placeholder="Room Code (e.g., room1)" />
+        <input type="text" id="username" placeholder="Username" />
+        <button onclick="connect()">Join Room</button>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <input type="text" id="messageText" placeholder="Send a message/score..." autocomplete="off"/>
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <div id="messages"></div>
+
+    <script>
+        let ws;
+
+        function connect() {
+            const roomCode = document.getElementById("roomCode").value;
+            const username = document.getElementById("username").value;
+            
+            // Connect to the FastAPI WebSocket endpoint we just built
+            ws = new WebSocket(`ws://localhost:8000/ws/${roomCode}/${username}`);
+            
+            ws.onmessage = function(event) {
+                const messagesDiv = document.getElementById("messages");
+                const message = document.createElement("div");
+                message.textContent = event.data;
+                messagesDiv.appendChild(message);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById("messageText");
+            if (ws && input.value) {
+                ws.send(input.value);
+                input.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
