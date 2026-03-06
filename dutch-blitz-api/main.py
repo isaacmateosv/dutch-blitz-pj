@@ -12,7 +12,11 @@ from dotenv import load_dotenv
 
 # AI model and functions; there's also a controller
 load_dotenv()
-client=AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# client=AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = AsyncOpenAI(
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1" # This tells the SDK to talk to Groq!
+)
 
 class ScoreData(BaseModel):
     player_name: str
@@ -122,7 +126,8 @@ async def generate_match_recap(data: MatchRecapRequest):
         """
 
         response = await client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            # model="gpt-3.5-turbo",
+            model="llama3-8b-8192", # Swapped to Groq's lightning-fast model
             messages=[{"role": "user", "content": prompt}],
             temperature=0.8,
             max_tokens=150
