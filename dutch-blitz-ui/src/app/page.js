@@ -47,8 +47,10 @@ export default function Home() {
     if (!username || !roomCode) return;
 
     // Use dynamic IP for mobile/production
-    const host = window.location.hostname;
-    ws.current = new WebSocket(`ws://${host}:8000/ws/${roomCode}/${username}`);
+    // const host = window.location.hostname;
+    // ws.current = new WebSocket(`ws://${host}:8000/ws/${roomCode}/${username}`);
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
+    ws.current = new WebSocket(`${wsUrl}/ws/${roomCode}/${username}`);
 
     ws.current.onmessage = (event) => {
       try {
@@ -140,8 +142,10 @@ export default function Home() {
         total_score: score
       }));
 
-      const host = window.location.hostname;
-      const response = await fetch(`http://${host}:8000/generate-recap/`, {
+      // const host = window.location.hostname;
+      // const response = await fetch(`http://${host}:8000/generate-recap/`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:8000`;
+      const response = await fetch(`${apiUrl}/generate-recap/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_code: roomCode, scores: formattedScores }),
