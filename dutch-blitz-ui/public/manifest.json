@@ -1,0 +1,17 @@
+{
+  "name": "Dutch Blitz Room",
+  "short_name": "BlitzRoom",
+  "description": "Real-time scoring for Dutch Blitz",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "https://www.svgrepo.com/show/309489/cards-playing.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

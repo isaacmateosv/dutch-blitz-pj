@@ -4,27 +4,24 @@ import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [isInRoom, setIsInRoom] = useState(false);
-  const isInRoomRef = useRef(false); // Ref for WebSockets to know we are fully connected
+  const isInRoomRef = useRef(false); 
   
-  // Lobby & Room Settings State
   const [username, setUsername] = useState("");
   const [roomCode, setRoomCode] = useState("");
   
   const [hasLimit, setHasLimit] = useState(true);
-  const hasLimitRef = useRef(true); // Ref to keep WebSocket closures up to date
+  const hasLimitRef = useRef(true); 
   
   const [targetScore, setTargetScore] = useState(75);
   const targetScoreRef = useRef(75); 
   
-  const [showSettings, setShowSettings] = useState(false); // In-game settings toggle
+  const [showSettings, setShowSettings] = useState(false); 
   
-  // Game State
   const [onlineCount, setOnlineCount] = useState(1);
   const [messages, setMessages] = useState([]);
   const [playerScores, setPlayerScores] = useState({});
   const [winner, setWinner] = useState(null);
   
-  // Scoring Input State
   const [isManualMath, setIsManualMath] = useState(true); 
   const [manualScore, setManualScore] = useState("");
   const [blitzCards, setBlitzCards] = useState("");
@@ -37,34 +34,60 @@ export default function Home() {
   const chatRef = useRef(null);
   const winnerDeclared = useRef(false);
 
-  // Keep Refs in sync with State for the WebSocket to read
   useEffect(() => {
     hasLimitRef.current = hasLimit;
     targetScoreRef.current = targetScore;
   }, [hasLimit, targetScore]);
 
-  const joinRoom = () => {
-    if (!username || !roomCode) return;
+  // --- NEW: Procedural Audio Pop ---
+  const playPopSound = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
+      
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.1);
+    } catch (e) {
+      console.log("Audio not supported");
+    }
+  };
 
-    // Use dynamic IP for mobile/production
-    // const host = window.location.hostname;
-    // ws.current = new WebSocket(`ws://${host}:8000/ws/${roomCode}/${username}`);
+  // --- NEW: Connection Resilience Logic ---
+  const connectWebSocket = () => {
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
-    ws.current = new WebSocket(`${wsUrl}/ws/${roomCode}/${username}`);
+    const socket = new WebSocket(`${wsUrl}/ws/${roomCode}/${username}`);
 
-    ws.current.onmessage = (event) => {
+    socket.onopen = () => {
+      setTimeout(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "system", message: `🟢 ${username} joined the lobby.` }));
+          socket.send(JSON.stringify({ type: "request_settings" }));
+        }
+      }, 500);
+    };
+
+    socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         
-        // 1. Handle System Messages & Player Count
         if (data.type === "system") {
           setMessages((prev) => [...prev, data.message]);
           if (data.playerCount) setOnlineCount(data.playerCount);
         } 
-        
-        // 2. NEW: Someone new joined and wants the true room settings
         else if (data.type === "request_settings") {
-          if (isInRoomRef.current) {
+          if (isInRoomRef.current && ws.current?.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
               type: "settings",
               hasLimit: hasLimitRef.current,
@@ -72,15 +95,14 @@ export default function Home() {
             }));
           }
         } 
-        
-        // 3. NEW: The room replied with the authoritative settings
         else if (data.type === "settings") {
           setHasLimit(data.hasLimit);
           setTargetScore(data.targetScore);
         }
-
-        // 4. Handle Score Updates
         else if (data.type === "score") {
+          // Play sound for every new score!
+          playPopSound();
+
           if (data.isManual) {
             setMessages((prev) => [...prev, `${data.username} scored ${data.roundScore} points! | (Manual Math)`]);
           } else {
@@ -90,11 +112,15 @@ export default function Home() {
           setPlayerScores((prevScores) => {
             const newTotal = (prevScores[data.username] || 0) + data.roundScore;
             
-            // Note: We use hasLimitRef here because we are inside the closure!
             if (hasLimitRef.current && newTotal >= targetScoreRef.current && !winnerDeclared.current) {
               winnerDeclared.current = true;
               setWinner(data.username);
               setMessages((prev) => [...prev, `🏆 ${data.username} HAS WON THE GAME WITH ${newTotal} POINTS! 🏆`]);
+              
+              // --- NEW: Haptic Feedback (Phone Buzz) ---
+              if (typeof navigator !== "undefined" && navigator.vibrate) {
+                navigator.vibrate([400, 200, 400, 200, 800]); // Celebration pattern
+              }
             }
             return { ...prevScores, [data.username]: newTotal };
           });
@@ -104,29 +130,39 @@ export default function Home() {
       }
     };
 
+    socket.onclose = () => {
+      // If we didn't deliberately close it, try to reconnect!
+      if (isInRoomRef.current && !winnerDeclared.current) {
+        setMessages((prev) => [...prev, `⚠️ Connection lost. Reconnecting...`]);
+        setTimeout(() => {
+          connectWebSocket();
+        }, 3000);
+      }
+    };
+
+    ws.current = socket;
+  };
+
+  const joinRoom = () => {
+    if (!username || !roomCode) return;
     setIsInRoom(true);
     isInRoomRef.current = true;
-
-    // After connecting, announce yourself AND ask the room for the real rules
-    setTimeout(() => {
-      if (ws.current) {
-        ws.current.send(JSON.stringify({ type: "system", message: `🟢 ${username} joined the lobby.` }));
-        ws.current.send(JSON.stringify({ type: "request_settings" }));
-      }
-    }, 500);
+    connectWebSocket();
   };
 
   useEffect(() => {
-    return () => { if (ws.current) ws.current.close(); };
+    return () => { 
+      isInRoomRef.current = false;
+      if (ws.current) ws.current.close(); 
+    };
   }, []);
 
   useEffect(() => {
     chatRef.current?.scrollTo(0, chatRef.current.scrollHeight);
   }, [messages]);
 
-  // --- NEW: Update Settings from inside the game ---
   const broadcastNewSettings = () => {
-    if (ws.current) {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({ type: "settings", hasLimit, targetScore }));
       ws.current.send(JSON.stringify({ type: "system", message: `⚙️ ${username} updated the room rules: ${hasLimit ? `First to ${targetScore}` : 'Endless Mode'}.` }));
     }
@@ -142,8 +178,6 @@ export default function Home() {
         total_score: score
       }));
 
-      // const host = window.location.hostname;
-      // const response = await fetch(`http://${host}:8000/generate-recap/`, {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:8000`;
       const response = await fetch(`${apiUrl}/generate-recap/`, {
         method: "POST",
@@ -169,7 +203,7 @@ export default function Home() {
       roundScore = dutch * 1 - blitz * 2;
     }
 
-    if (ws.current && !winner) {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN && !winner) {
       ws.current.send(JSON.stringify({
         type: "score",
         username: username,
@@ -280,13 +314,13 @@ export default function Home() {
         {/* Chat */}
         <div ref={chatRef} className="bg-neutral-900 h-48 md:h-80 rounded-xl border border-neutral-800/60 p-4 overflow-y-auto shadow-inner flex flex-col gap-2">
           {messages.map((msg, idx) => (
-            <div key={idx} className={`p-3 rounded-md w-fit max-w-[90%] md:max-w-[80%] text-sm md:text-base ${msg.includes("System:") || msg.includes("⚙️") || msg.includes("🟢") || msg.includes("🔴") ? "bg-neutral-950 text-neutral-500 text-xs font-mono border border-neutral-800" : "bg-neutral-800/80 shadow-sm"}`}>
+            <div key={idx} className={`p-3 rounded-md w-fit max-w-[90%] md:max-w-[80%] text-sm md:text-base ${msg.includes("System:") || msg.includes("⚠️") || msg.includes("⚙️") || msg.includes("🟢") || msg.includes("🔴") ? "bg-neutral-950 text-neutral-500 text-xs font-mono border border-neutral-800" : "bg-neutral-800/80 shadow-sm"}`}>
               {renderMessage(msg)}
             </div>
           ))}
         </div>
 
-        {/* Score Panel */}
+        {/* Score Panel with Manual Toggle */}
         <div className={`flex flex-col gap-4 w-full bg-neutral-900 p-4 rounded-xl border transition ${winner ? 'border-amber-500/50 shadow-lg shadow-amber-900/20' : 'border-neutral-800/60'}`}>
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-1">
             <span className="text-sm font-bold text-neutral-400">Score Input Method</span>
