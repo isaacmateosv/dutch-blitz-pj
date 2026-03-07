@@ -64,18 +64,26 @@ export default function Home() {
     }
   };
 
-  // --- NEW: Connection Resilience Logic ---
+  // --- NEW: Connection Resilience & Heartbeat Logic ---
   const connectWebSocket = () => {
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
     const socket = new WebSocket(`${wsUrl}/ws/${roomCode}/${username}`);
+    let pingInterval; // Variable to hold our heartbeat timer
 
     socket.onopen = () => {
+      // 1. Ask the room for the rules
       setTimeout(() => {
         if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "system", message: `🟢 ${username} joined the lobby.` }));
           socket.send(JSON.stringify({ type: "request_settings" }));
         }
       }, 500);
+
+      // 2. Start the Heartbeat to prevent Render from killing the connection
+      pingInterval = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 30000); // Sends a ping every 30 seconds
     };
 
     socket.onmessage = (event) => {
@@ -84,7 +92,7 @@ export default function Home() {
         
         if (data.type === "system") {
           setMessages((prev) => [...prev, data.message]);
-          if (data.playerCount) setOnlineCount(data.playerCount);
+          if (data.playerCount !== undefined) setOnlineCount(data.playerCount); // Force update count
         } 
         else if (data.type === "request_settings") {
           if (isInRoomRef.current && ws.current?.readyState === WebSocket.OPEN) {
@@ -100,7 +108,6 @@ export default function Home() {
           setTargetScore(data.targetScore);
         }
         else if (data.type === "score") {
-          // Play sound for every new score!
           playPopSound();
 
           if (data.isManual) {
@@ -117,9 +124,8 @@ export default function Home() {
               setWinner(data.username);
               setMessages((prev) => [...prev, `🏆 ${data.username} HAS WON THE GAME WITH ${newTotal} POINTS! 🏆`]);
               
-              // --- NEW: Haptic Feedback (Phone Buzz) ---
               if (typeof navigator !== "undefined" && navigator.vibrate) {
-                navigator.vibrate([400, 200, 400, 200, 800]); // Celebration pattern
+                navigator.vibrate([400, 200, 400, 200, 800]); 
               }
             }
             return { ...prevScores, [data.username]: newTotal };
@@ -131,7 +137,9 @@ export default function Home() {
     };
 
     socket.onclose = () => {
-      // If we didn't deliberately close it, try to reconnect!
+      clearInterval(pingInterval); // Stop pinging if the connection dies
+      
+      // Attempt auto-reconnect if it wasn't a deliberate quit
       if (isInRoomRef.current && !winnerDeclared.current) {
         setMessages((prev) => [...prev, `⚠️ Connection lost. Reconnecting...`]);
         setTimeout(() => {

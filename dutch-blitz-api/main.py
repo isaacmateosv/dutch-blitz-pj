@@ -81,7 +81,7 @@ def create_room(room: RoomCreate, db: Session = Depends(get_db)):
 async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str):
     await manager.connect(websocket, room_code)
     
-    # 1. Calculate active players and send JSON system message
+    # 1. Announce join and send player count
     player_count = len(manager.active_connections[room_code])
     join_message = {
         "type": "system",
@@ -92,14 +92,22 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
     
     try:
         while True:
-            # 2. Receive JSON from React and bounce it to everyone
             data = await websocket.receive_text()
+            
+            # NEW: Check if it's a heartbeat ping. If it is, ignore it!
+            try:
+                parsed = json.loads(data)
+                if parsed.get("type") == "ping":
+                    continue 
+            except:
+                pass
+                
             await manager.broadcast(data, room_code)
             
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_code)
         
-        # 3. Announce player left and update count
+        # 2. Announce leave and update player count
         player_count = len(manager.active_connections.get(room_code, []))
         leave_message = {
             "type": "system",
