@@ -4,25 +4,28 @@ import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [isInRoom, setIsInRoom] = useState(false);
-  const isInRoomRef = useRef(false); 
-  
+  const isInRoomRef = useRef(false);
+
   const [username, setUsername] = useState("");
   const [roomCode, setRoomCode] = useState("");
-  
+
   const [hasLimit, setHasLimit] = useState(true);
-  const hasLimitRef = useRef(true); 
-  
+  const hasLimitRef = useRef(true);
+
   const [targetScore, setTargetScore] = useState(75);
-  const targetScoreRef = useRef(75); 
-  
-  const [showSettings, setShowSettings] = useState(false); 
-  
+  const targetScoreRef = useRef(75);
+
+  const [showSettings, setShowSettings] = useState(false);
+
   const [onlineCount, setOnlineCount] = useState(1);
   const [messages, setMessages] = useState([]);
+
   const [playerScores, setPlayerScores] = useState({});
+  const playerScoresRef = useRef({}); // NEW: Keeps track of scores for the WebSocket
+
   const [winner, setWinner] = useState(null);
-  
-  const [isManualMath, setIsManualMath] = useState(true); 
+
+  const [isManualMath, setIsManualMath] = useState(true);
   const [manualScore, setManualScore] = useState("");
   const [blitzCards, setBlitzCards] = useState("");
   const [dutchCards, setDutchCards] = useState("");
@@ -37,7 +40,8 @@ export default function Home() {
   useEffect(() => {
     hasLimitRef.current = hasLimit;
     targetScoreRef.current = targetScore;
-  }, [hasLimit, targetScore]);
+    playerScoresRef.current = playerScores; // NEW
+  }, [hasLimit, targetScore, playerScores]);
 
   // --- NEW: Procedural Audio Pop ---
   const playPopSound = () => {
@@ -46,17 +50,17 @@ export default function Home() {
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
+
       osc.connect(gain);
       gain.connect(ctx.destination);
-      
+
       osc.type = "sine";
       osc.frequency.setValueAtTime(800, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
-      
+
       gain.gain.setValueAtTime(0.1, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-      
+
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.1);
     } catch (e) {
@@ -89,23 +93,34 @@ export default function Home() {
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === "system") {
           setMessages((prev) => [...prev, data.message]);
           if (data.playerCount !== undefined) setOnlineCount(data.playerCount); // Force update count
-        } 
+        }
         else if (data.type === "request_settings") {
+          // If we are already in the room, send the new guy the rules AND the current scores!
           if (isInRoomRef.current && ws.current?.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
               type: "settings",
               hasLimit: hasLimitRef.current,
-              targetScore: targetScoreRef.current
+              targetScore: targetScoreRef.current,
+              playerScores: playerScoresRef.current // NEW: Send the scoreboard
             }));
           }
-        } 
+        }
         else if (data.type === "settings") {
           setHasLimit(data.hasLimit);
           setTargetScore(data.targetScore);
+
+          // NEW: If we just joined (our scoreboard is empty) but the room has active scores, adopt them!
+          if (data.playerScores && Object.keys(playerScoresRef.current).length === 0) {
+            setPlayerScores(data.playerScores);
+          }
+        }
+        else if (data.type === "pong") {
+          // Optional: Just silently catch the server's pong response
+          return;
         }
         else if (data.type === "score") {
           playPopSound();
@@ -115,17 +130,17 @@ export default function Home() {
           } else {
             setMessages((prev) => [...prev, `${data.username} scored ${data.roundScore} points! | (Dutch: ${data.dutch}, Blitz: ${data.blitz})`]);
           }
-          
+
           setPlayerScores((prevScores) => {
             const newTotal = (prevScores[data.username] || 0) + data.roundScore;
-            
+
             if (hasLimitRef.current && newTotal >= targetScoreRef.current && !winnerDeclared.current) {
               winnerDeclared.current = true;
               setWinner(data.username);
               setMessages((prev) => [...prev, `🏆 ${data.username} HAS WON THE GAME WITH ${newTotal} POINTS! 🏆`]);
-              
+
               if (typeof navigator !== "undefined" && navigator.vibrate) {
-                navigator.vibrate([400, 200, 400, 200, 800]); 
+                navigator.vibrate([400, 200, 400, 200, 800]);
               }
             }
             return { ...prevScores, [data.username]: newTotal };
@@ -138,7 +153,7 @@ export default function Home() {
 
     socket.onclose = () => {
       clearInterval(pingInterval); // Stop pinging if the connection dies
-      
+
       // Attempt auto-reconnect if it wasn't a deliberate quit
       if (isInRoomRef.current && !winnerDeclared.current) {
         setMessages((prev) => [...prev, `⚠️ Connection lost. Reconnecting...`]);
@@ -159,9 +174,9 @@ export default function Home() {
   };
 
   useEffect(() => {
-    return () => { 
+    return () => {
       isInRoomRef.current = false;
-      if (ws.current) ws.current.close(); 
+      if (ws.current) ws.current.close();
     };
   }, []);
 
@@ -246,19 +261,19 @@ export default function Home() {
           <h1 className="text-3xl font-bold tracking-wider text-center mb-4">
             BLITZ<span className="text-emerald-500">ROOM</span>
           </h1>
-          
+
           <input className="p-3 bg-neutral-800 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 transition lowercase" placeholder="username" value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} autoCapitalize="none" autoCorrect="off" spellCheck="false" />
           <input className="p-3 bg-neutral-800 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 transition lowercase" placeholder="room code" value={roomCode} onChange={(e) => setRoomCode(e.target.value.toLowerCase())} autoCapitalize="none" autoCorrect="off" spellCheck="false" />
-          
+
           <div className="bg-neutral-950 p-4 rounded-lg border border-neutral-800 mt-2 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-bold text-neutral-300">Enable Score Limit</label>
-              <input type="checkbox" className="w-5 h-5 accent-emerald-500 rounded cursor-pointer" checked={hasLimit} onChange={(e) => setHasLimit(e.target.checked)}/>
+              <input type="checkbox" className="w-5 h-5 accent-emerald-500 rounded cursor-pointer" checked={hasLimit} onChange={(e) => setHasLimit(e.target.checked)} />
             </div>
             {hasLimit && (
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-neutral-500 uppercase tracking-wider">Target Score to Win</label>
-                <input type="number" className="p-2 bg-neutral-800 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-sm font-bold" value={targetScore} onChange={(e) => setTargetScore(parseInt(e.target.value) || 75)}/>
+                <input type="number" className="p-2 bg-neutral-800 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-sm font-bold" value={targetScore} onChange={(e) => setTargetScore(parseInt(e.target.value) || 75)} />
               </div>
             )}
           </div>
@@ -275,7 +290,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-neutral-950 p-4 md:p-8 text-white flex justify-center">
       <div className="w-full max-w-2xl flex flex-col gap-4">
-        
+
         {/* Header & Leaderboard */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-neutral-800/60 pb-4 gap-4">
           <div>
@@ -305,12 +320,12 @@ export default function Home() {
           <div className="bg-neutral-900 border border-neutral-700 p-4 rounded-xl flex flex-col gap-3 shadow-lg">
             <div className="flex items-center justify-between">
               <label className="text-sm font-bold text-neutral-300">Enable Score Limit</label>
-              <input type="checkbox" className="w-5 h-5 accent-emerald-500 rounded cursor-pointer" checked={hasLimit} onChange={(e) => setHasLimit(e.target.checked)} disabled={!!winner}/>
+              <input type="checkbox" className="w-5 h-5 accent-emerald-500 rounded cursor-pointer" checked={hasLimit} onChange={(e) => setHasLimit(e.target.checked)} disabled={!!winner} />
             </div>
             {hasLimit && (
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-neutral-500 uppercase tracking-wider">Target Score to Win</label>
-                <input type="number" className="p-2 bg-neutral-950 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-sm font-bold" value={targetScore} onChange={(e) => setTargetScore(parseInt(e.target.value) || 75)} disabled={!!winner}/>
+                <input type="number" className="p-2 bg-neutral-950 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 transition text-sm font-bold" value={targetScore} onChange={(e) => setTargetScore(parseInt(e.target.value) || 75)} disabled={!!winner} />
               </div>
             )}
             <button className="bg-neutral-800 hover:bg-neutral-700 text-sm font-bold p-2 rounded transition mt-1" onClick={broadcastNewSettings} disabled={!!winner}>
@@ -333,7 +348,7 @@ export default function Home() {
           <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-1">
             <span className="text-sm font-bold text-neutral-400">Score Input Method</span>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" checked={isManualMath} onChange={(e) => setIsManualMath(e.target.checked)} disabled={!!winner}/>
+              <input type="checkbox" className="sr-only peer" checked={isManualMath} onChange={(e) => setIsManualMath(e.target.checked)} disabled={!!winner} />
               <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
               <span className="ml-3 text-sm font-medium text-neutral-300">{isManualMath ? "Manual Math" : "Calculate for me"}</span>
             </label>
@@ -344,20 +359,20 @@ export default function Home() {
               <>
                 <div className="flex-1 w-full">
                   <label className="block text-sm text-neutral-400 mb-1">Blitz Cards Left (-2)</label>
-                  <input type="number" className="w-full p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50" value={blitzCards} onChange={(e) => setBlitzCards(e.target.value)} placeholder="0" disabled={!!winner}/>
+                  <input type="number" className="w-full p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50" value={blitzCards} onChange={(e) => setBlitzCards(e.target.value)} placeholder="0" disabled={!!winner} />
                 </div>
                 <div className="flex-1 w-full">
                   <label className="block text-sm text-neutral-400 mb-1">Dutch Cards Played (+1)</label>
-                  <input type="number" className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" value={dutchCards} onChange={(e) => setDutchCards(e.target.value)} placeholder="0" disabled={!!winner}/>
+                  <input type="number" className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" value={dutchCards} onChange={(e) => setDutchCards(e.target.value)} placeholder="0" disabled={!!winner} />
                 </div>
               </>
             ) : (
               <div className="flex-1 w-full">
                 <label className="block text-sm text-neutral-400 mb-1">Total Round Score</label>
-                <input type="number" className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" value={manualScore} onChange={(e) => setManualScore(e.target.value)} placeholder="e.g. 14 or -4" disabled={!!winner}/>
+                <input type="number" className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" value={manualScore} onChange={(e) => setManualScore(e.target.value)} placeholder="e.g. 14 or -4" disabled={!!winner} />
               </div>
             )}
-            
+
             <div className="flex items-end w-full md:w-auto mt-2 md:mt-0">
               <button className={`w-full md:w-auto p-3 px-8 h-[50px] rounded-lg font-bold transition shadow-lg ${winner ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`} onClick={submitScore} disabled={!!winner}>
                 {winner ? "GAME OVER" : "SUBMIT"}

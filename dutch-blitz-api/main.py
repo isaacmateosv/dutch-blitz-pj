@@ -94,10 +94,11 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
         while True:
             data = await websocket.receive_text()
             
-            # NEW: Check if it's a heartbeat ping. If it is, ignore it!
+            # NEW: If it's a ping, reply directly to the user with a pong to keep Render happy!
             try:
                 parsed = json.loads(data)
                 if parsed.get("type") == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong"}))
                     continue 
             except:
                 pass
