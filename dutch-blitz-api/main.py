@@ -106,6 +106,7 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                     3. Máximo 6 palabras.
                     4. Usa Español o Spanglish.
                     5. NO uses comillas en tu respuesta.
+                    6. ORTOGRAFÍA PERFECTA: No mezcles singular con plural. Si usas exclamaciones o preguntas en español, DEBES incluir OBLIGATORIAMENTE los signos de apertura (¡, ¿).
                     """
                     
                     try:
@@ -154,7 +155,7 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                     If there is only ONE player in the stats, make fun of them for playing completely alone with imaginary friends.
                     
                     FORMATTING RULES: 
-                    - Use markdown bolding (**word**) for player names and scores.
+                    - CRITICAL: You MUST wrap EVERY player name and EVERY score/number in double asterisks. (Example: **dino** ganó con **155** puntos). Do not forget this!
                     - Use emojis.
                     - DO NOT wrap your response in quotation marks. Write ONLY ONE short paragraph. TRY NOT to exceed 60 words.
                     """

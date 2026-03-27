@@ -1,9 +1,12 @@
 "use client";
+const EMOJIS = ["👾", "🦊", "🐶", "🐱", "🐰", "🐼", "🐯", "🐸", "🦄", "👽", "👻", "🤖", "🤡", "👹", "👑", "🔥", "🐳", "🫍", "💯", "💩", "💀", "🐢", "🐺", "🦖", "🐝"];
 
 import { useState, useEffect, useRef } from "react";
-import RoomSettings from "../components/RoomSettings"; // <--- AÑADE ESTO
-
-const EMOJIS = ["👾", "🦊", "🐶", "🐱", "🐰", "🐼", "🐯", "🐸", "🦄", "👽", "👻", "🤖", "🤡", "👹", "👑", "🔥", "🐳", "🫍"];
+import RoomSettings from "../components/RoomSettings";
+import Lobby from "../components/Lobby";
+import ScorePanel from "../components/ScorePanel";
+import ChatBox from "../components/ChatBox";
+import AiRecap from "../components/AiRecap";
 
 const getUserColor = (name) => {
   const colors = [
@@ -27,8 +30,6 @@ export default function Home() {
   const [roomCode, setRoomCode] = useState("");
   const [myThought, setMyThought] = useState("");
 
-  const [hasLimit, setHasLimit] = useState(true);
-  const hasLimitRef = useRef(true);
   const [targetScore, setTargetScore] = useState(75);
   const targetScoreRef = useRef(75);
   const [aiEnabled, setAiEnabled] = useState(true);
@@ -37,8 +38,8 @@ export default function Home() {
 
   const [onlineCount, setOnlineCount] = useState(1);
   const [messages, setMessages] = useState([]);
-  const [toasts, setToasts] = useState([]); 
-  
+  const [toasts, setToasts] = useState([]);
+
   // NUEVO: Estados para el Timeout de Inactividad (Tarea 11)
   const [lastActivity, setLastActivity] = useState(Date.now());
   const [inactivityAlert, setInactivityAlert] = useState("");
@@ -63,7 +64,6 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const ws = useRef(null);
-  const chatRef = useRef(null);
 
   useEffect(() => {
     const randomEmoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
@@ -73,7 +73,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    hasLimitRef.current = hasLimit;
     targetScoreRef.current = targetScore;
     playerScoresRef.current = playerScores;
     playerStatusesRef.current = playerStatuses;
@@ -83,13 +82,13 @@ export default function Home() {
     if (isInRoomRef.current) {
       sessionStorage.setItem("blitzScores", JSON.stringify(playerScores));
       sessionStorage.setItem("blitzStatuses", JSON.stringify(playerStatuses));
-      sessionStorage.setItem("blitzRules", JSON.stringify({ hasLimit, targetScore }));
+      sessionStorage.setItem("blitzRules", JSON.stringify({ targetScore }));
       sessionStorage.setItem("blitzMessages", JSON.stringify(messages));
       sessionStorage.setItem("blitzAiEnabled", JSON.stringify(aiEnabled));
       if (winner) sessionStorage.setItem("blitzWinner", winner);
       else sessionStorage.removeItem("blitzWinner");
     }
-  }, [hasLimit, targetScore, playerScores, playerStatuses, messages, winner, aiEnabled]);
+  }, [targetScore, playerScores, playerStatuses, messages, winner, aiEnabled]);
 
   useEffect(() => {
     const savedUser = sessionStorage.getItem("blitzUsername");
@@ -104,7 +103,7 @@ export default function Home() {
     if (savedUser && savedRoom) {
       setUsername(savedUser);
       setRoomCode(savedRoom);
-      
+
       if (savedAiEnabled) setAiEnabled(JSON.parse(savedAiEnabled));
       if (savedScores) setPlayerScores(JSON.parse(savedScores));
 
@@ -122,7 +121,6 @@ export default function Home() {
 
       if (savedRules) {
         const rules = JSON.parse(savedRules);
-        setHasLimit(rules.hasLimit);
         setTargetScore(rules.targetScore);
       }
       if (savedWinner) {
@@ -138,7 +136,7 @@ export default function Home() {
   // ⏱️ EFECTO DE TIMEOUT POR INACTIVIDAD (Dead Man's Switch)
   useEffect(() => {
     if (!isInRoom) return; // Si estamos en el lobby, el reloj se apaga
-    
+
     const timer = setTimeout(() => {
       leaveRoom(); // Expulsa al jugador
       setInactivityAlert("⏳ Fuiste desconectado de la sala por inactividad (~20 min).");
@@ -170,11 +168,11 @@ export default function Home() {
   const showToast = (msg) => {
     const id = Date.now() + Math.random(); // ID único
     setToasts(prev => [...prev, { id, msg }]);
-    
+
     // Desaparece mágicamente a los 4 segundos
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000); 
+    }, 4000);
   };
 
   const connectWebSocket = (currentRoom = roomCode, currentUser = username) => {
@@ -185,14 +183,14 @@ export default function Home() {
     // FIX: Agrupador inteligente de mensajes
     const appendMsg = (text, isTemporary = false) => {
       const id = Date.now().toString() + Math.random().toString();
-      
+
       setMessages(prev => {
         const newMsgs = [...prev];
         const lastMsg = newMsgs[newMsgs.length - 1];
-        
+
         if (lastMsg && lastMsg.text === text && isTemporary) {
-           lastMsg.count = (lastMsg.count || 1) + 1;
-           return newMsgs;
+          lastMsg.count = (lastMsg.count || 1) + 1;
+          return newMsgs;
         }
         return [...newMsgs, { id, text, count: 1 }];
       });
@@ -223,7 +221,7 @@ export default function Home() {
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         // NUEVO: Si alguien hace CUALQUIER COSA (excepto pings internos), reiniciamos el reloj
         if (data.type !== "pong" && data.type !== "request_settings") {
           setLastActivity(Date.now());
@@ -231,23 +229,30 @@ export default function Home() {
 
         if (data.type === "system") {
           const isJoinOrLeave = data.message.includes("joined") || data.message.includes("left");
-          
+
           // FIX DE UX: Si es entrar/salir, es un Toast flotante. NO se guarda en el chat.
           if (isJoinOrLeave) {
             showToast(data.message.replace('🟢 ', '').replace('🔴 ', ''));
           } else {
-            appendMsg(data.message); 
+            appendMsg(data.message);
           }
 
           if (data.playerCount !== undefined) setOnlineCount(data.playerCount);
         }
         else if (data.type === "request_settings") {
           if (isInRoomRef.current && ws.current?.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({ type: "settings", hasLimit: hasLimitRef.current, targetScore: targetScoreRef.current, aiEnabled: aiEnabledRef.current, playerScores: playerScoresRef.current, playerStatuses: playerStatusesRef.current, winner: winnerRef.current }));
+            // Asegúrate de borrar 'hasLimit: hasLimitRef.current' de este envío de vuelta
+            ws.current.send(JSON.stringify({ 
+              type: "settings", 
+              targetScore: targetScoreRef.current, 
+              aiEnabled: aiEnabledRef.current, 
+              playerScores: playerScoresRef.current, 
+              playerStatuses: playerStatusesRef.current, 
+              winner: winnerRef.current 
+            }));
           }
         }
         else if (data.type === "settings") {
-          setHasLimit(data.hasLimit);
           setTargetScore(data.targetScore);
           if (data.aiEnabled !== undefined) setAiEnabled(data.aiEnabled);
 
@@ -294,21 +299,27 @@ export default function Home() {
           playPopSound();
         }
         else if (data.type === "score") {
+          // 1. Calculamos el puntaje AFUERA de setPlayerScores usando la referencia
+          const currentScore = playerScoresRef.current[data.username] || 0;
+          const newTotal = currentScore + data.roundScore;
+
+          // 2. Imprimimos los puntos en el chat tranquilamente
           if (!data.isSilent) {
             playPopSound();
             if (data.isManual) appendMsg(`${data.username} scored ${data.roundScore} points! | (Manual Math)`);
             else appendMsg(`${data.username} scored ${data.roundScore} points! | (Dutch: ${data.dutch}, Blitz: ${data.blitz})`);
           }
-          setPlayerScores((prevScores) => {
-            const newTotal = (prevScores[data.username] || 0) + data.roundScore;
-            if (hasLimitRef.current && newTotal >= targetScoreRef.current && !winnerDeclared.current) {
-              winnerDeclared.current = true;
-              setWinner(data.username);
-              appendMsg(`🏆 ${data.username} HAS WON THE GAME WITH ${newTotal} POINTS! 🏆`);
-              if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 800]);
-            }
-            return { ...prevScores, [data.username]: newTotal };
-          });
+
+          // 3. Actualizamos el estado de React (Cero efectos secundarios aquí adentro)
+          setPlayerScores(prev => ({ ...prev, [data.username]: newTotal }));
+
+          // 4. Revisamos si hubo victoria usando la variable que ya calculamos
+          if (newTotal >= targetScoreRef.current && !winnerDeclared.current) {
+            winnerDeclared.current = true;
+            setWinner(data.username);
+            appendMsg(`🏆 ${data.username} HAS WON THE GAME WITH ${newTotal} POINTS! 🏆`);
+            if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 800]);
+          }
         }
         else if (data.type === "ai_recap_broadcast") {
           setIsGenerating(false);
@@ -389,26 +400,24 @@ export default function Home() {
     }
   };
 
-  useEffect(() => { chatRef.current?.scrollTo(0, chatRef.current.scrollHeight); }, [messages]);
-
-const broadcastNewSettings = (newScore, newAi) => {
+  const broadcastNewSettings = (newScore, newAi) => {
     setTargetScore(newScore);
     setAiEnabled(newAi);
 
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ 
-        type: "settings", 
-        targetScore: newScore, 
-        aiEnabled: newAi, 
-        playerScores: playerScoresRef.current, 
-        playerStatuses: playerStatusesRef.current, 
-        winner: winnerRef.current 
+      ws.current.send(JSON.stringify({
+        type: "settings",
+        targetScore: newScore,
+        aiEnabled: newAi,
+        playerScores: playerScoresRef.current,
+        playerStatuses: playerStatusesRef.current,
+        winner: winnerRef.current
       }));
-      
+
       const aiMsg = newAi ? '🎙️ AI ON' : '🚫 AI OFF';
-      ws.current.send(JSON.stringify({ 
-        type: "system", 
-        message: `⚙️ ${username} updated the room rules: [First to ${newScore}] | [${aiMsg}]` 
+      ws.current.send(JSON.stringify({
+        type: "system",
+        message: `⚙️ ${username} updated the room rules: [First to ${newScore}] | [${aiMsg}]`
       }));
     }
     setShowSettings(false);
@@ -447,123 +456,29 @@ const broadcastNewSettings = (newScore, newAi) => {
     }
   };
 
-  const renderMessage = (text) => {
-    // FIX: Si es el mensaje de victoria, le damos un estilo ÉPICO y dorado
-    if (text.includes("HAS WON THE GAME")) {
-      return <span className="text-amber-400 font-extrabold text-base tracking-wide drop-shadow-md">{text}</span>;
-    }
-
-    let userColor = "text-white";
-
-    
-    const players = Object.keys(playerScoresRef.current);
-    const sender = players.find(p => text.includes(p));
-    
-    if (sender) userColor = getUserColor(sender);
-
-    if (text.includes(" | ")) {
-      const parts = text.split(" | ");
-      // UX FIX: Solo coloreamos el nombre del usuario, el resto del texto se queda blanco
-      if (sender && parts[0].startsWith(sender)) {
-         const actionText = parts[0].substring(sender.length).trim(); // <-- AÑADIDO: .trim()
-         return (
-           <>
-             <span className={`font-bold ${userColor}`}>{sender}</span>
-             {/* AÑADIDO: ml-1 para forzar la separación */}
-             <span className="font-bold text-neutral-200 ml-1">{actionText}</span>
-             <span className="font-mono text-neutral-500 text-[11px] ml-2">{parts[1]}</span>
-           </>
-         );
-      }
-      
-      return (
-        <>
-          <span className={`font-bold ${userColor}`}>{parts[0]}</span>
-          <span className="font-mono text-neutral-500 text-[11px] ml-2">{parts[1]}</span>
-        </>
-      );
-    }
-    return <span className={sender ? userColor : "text-neutral-300"}>{text}</span>;
-  };
-
-  const renderAIText = (text) => {
-    const cleanText = text.replace(/^"|"$/g, '');
-    return cleanText.split('\n').map((line, i) => {
-      if (!line.trim()) return null;
-      const parts = line.split('**');
-      return (
-        <p key={i} className="mb-3 text-purple-100 leading-relaxed text-sm md:text-base">
-          {parts.map((part, index) => index % 2 === 1 ? <strong key={index} className="text-white font-bold">{part}</strong> : part)}
-        </p>
-      );
-    });
-  };
-
   // --- LOBBY SCREEN ---
   if (!isInRoom) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-white p-4">
-        <div className="flex flex-col gap-4 bg-neutral-900 p-8 rounded-xl shadow-2xl border border-neutral-800/60 w-full max-w-sm">
-          <h1 className="text-3xl font-bold tracking-wider text-center mb-4 text-[#4ade80]">
-            BLITZ<span className="text-white">ROOM</span>
-          </h1>
-          
-          {/* NUEVO: Alerta de Inactividad */}
-          {inactivityAlert && (
-            <div className="bg-red-900/40 border border-red-500/50 text-red-200 p-3 rounded-lg text-sm text-center font-medium animate-pulse shadow-lg mb-2">
-              {inactivityAlert}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <select className="p-3 bg-neutral-800 rounded-md focus:outline-none focus:ring-2 focus:ring-[#fbd304] text-xl cursor-pointer" value={selectedEmoji} onChange={(e) => setSelectedEmoji(e.target.value)}>
-              {EMOJIS.map(e => <option key={e} value={e}>{e}</option>)}
-            </select>
-            <input className="p-3 bg-neutral-800 rounded-md focus:outline-none focus:ring-2 focus:ring-[#fbd304] transition lowercase w-full" placeholder="username" value={rawUsername} onChange={(e) => setRawUsername(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck="false" />
-          </div>
-          <div className="flex flex-col">
-            <input className="p-3 bg-neutral-800 rounded-md focus:outline-none focus:ring-2 focus:ring-[#fbd304] transition lowercase" placeholder="room code" value={roomCode} onChange={(e) => setRoomCode(e.target.value.toLowerCase())} autoCapitalize="none" autoCorrect="off" spellCheck="false" />
-            {recentRooms.length > 0 && (
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {recentRooms.map(room => (
-                  <button key={room} onClick={() => joinRoom(room)} className="bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-400 px-3 py-1.5 rounded-full transition border border-neutral-700 hover:border-[#005ba1]/50">
-                    🕒 {room}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="bg-neutral-950 p-4 rounded-lg border border-neutral-800 mt-2 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-bold text-neutral-300">Enable Score Limit</label>
-              <input type="checkbox" className="w-5 h-5 accent-[#d22730] rounded cursor-pointer" checked={hasLimit} onChange={(e) => setHasLimit(e.target.checked)} />
-            </div>
-            {hasLimit && (
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-neutral-500 uppercase tracking-wider">Target Score to Win</label>
-                <input 
-                  type="number" 
-                  className="p-2 bg-neutral-800 rounded focus:outline-none focus:ring-1 focus:ring-[#d22730] transition text-sm font-bold" 
-                  value={targetScore} 
-                  onChange={(e) => setTargetScore(e.target.value === "" ? "" : parseInt(e.target.value))} 
-                  onBlur={() => { if (targetScore === "" || targetScore <= 0) setTargetScore(75); }}
-                  onKeyDown={(e) => { if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault(); }}
-                />
-              </div>
-            )}
-          </div>
-          <button className="p-3 bg-[#005ba1] hover:bg-blue-600 rounded-md font-bold tracking-wide transition shadow-lg mt-2" onClick={() => joinRoom(roomCode)}>
-            JOIN LOBBY
-          </button>
-        </div>
-      </div>
+      <Lobby
+        rawUsername={rawUsername}
+        setRawUsername={setRawUsername}
+        selectedEmoji={selectedEmoji}
+        setSelectedEmoji={setSelectedEmoji}
+        roomCode={roomCode}
+        setRoomCode={setRoomCode}
+        recentRooms={recentRooms}
+        joinRoom={joinRoom}
+        targetScore={targetScore}
+        setTargetScore={setTargetScore}
+        inactivityAlert={inactivityAlert}
+      />
     );
   }
 
   // --- GAME SCREEN ---
   return (
     <div className="min-h-screen bg-neutral-950 p-4 md:p-8 text-white flex justify-center relative">
-      
+
       {/* NUEVO: TOAST NOTIFICATIONS (Flotan en la esquina superior derecha) */}
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
         {toasts.map(t => (
@@ -587,7 +502,7 @@ const broadcastNewSettings = (newScore, newAi) => {
               <div className="flex items-center gap-3 mt-1">
                 {/* FIX: Texto fijo, ya no preguntamos por Endless Mode */}
                 <p className="text-sm text-neutral-400">First to {targetScore} wins</p>
-                
+
                 <span className="bg-blue-900/30 text-blue-400 border border-blue-800/50 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> {onlineCount} Online
                 </span>
@@ -651,132 +566,31 @@ const broadcastNewSettings = (newScore, newAi) => {
           />
         )}
 
-        {/* Chat */}
-        <div ref={chatRef} className="bg-neutral-900 h-48 md:h-80 rounded-xl border border-neutral-800/60 p-4 overflow-y-auto shadow-inner flex flex-col gap-2">
-          {messages.map((msg) => {
-            const text = typeof msg === 'string' ? msg : msg.text;
-            const key = typeof msg === 'string' ? Math.random() : msg.id;
-            const count = typeof msg === 'string' ? 1 : (msg.count || 1);
-            
-            const isSystemEvent = text.includes("joined") || text.includes("left") || text.includes("restarted");
-
-            // RENDERIZADO DISCRETO Y MÁS GRANDE PARA EVENTOS (Píldoras)
-            if (isSystemEvent) {
-              const cleanText = text.replace('🟢 ', '').replace('🔴 ', '');
-              return (
-                <div key={key} className="w-full flex justify-center my-1 opacity-80">
-                  <span className="text-xs text-neutral-400 bg-neutral-950 px-5 py-2 rounded-full border border-neutral-800/80 shadow-sm flex items-center">
-                    {cleanText} 
-                    {count > 1 && <span className="font-bold ml-2 bg-neutral-800 text-neutral-300 px-1.5 py-0.5 rounded text-[10px]">x{count}</span>}
-                  </span>
-                </div>
-              );
-            }
-
-            // RENDERIZADO MINIMALISTA PARA PUNTAJES (Sin colores invasivos)
-            return (
-              <div key={key} className="p-3 rounded-xl w-fit max-w-[90%] md:max-w-[80%] text-sm md:text-base bg-neutral-800/50 border border-neutral-700/50 shadow-sm flex items-center">
-                {renderMessage(text)}
-                
-                {count > 1 && (
-                  <span className="ml-2 bg-neutral-700 text-white font-bold text-[10px] px-1.5 py-0.5 rounded-full">
-                    x{count}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {/* Chat Box */}
+        <ChatBox 
+          messages={messages} 
+          playerScores={playerScores} 
+          getUserColor={getUserColor} 
+        />
 
         {/* Score Panel */}
-        <div className={`flex flex-col gap-4 w-full bg-neutral-900 p-4 rounded-xl border transition ${winner ? 'border-amber-500/50 shadow-lg shadow-amber-900/20' : 'border-neutral-800/60'}`}>
-          <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-1">
-            <span className="text-sm font-bold text-neutral-400">Score Input Method</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" checked={isManualMath} onChange={(e) => setIsManualMath(e.target.checked)} disabled={!!winner} />
-              <div className="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#2a7a40]"></div>
-              <span className="ml-3 text-sm font-medium text-neutral-300">{isManualMath ? "Manual Math" : "Calculate for me"}</span>
-            </label>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-4">
-            {!isManualMath ? (
-              <>
-                <div className="flex-1 w-full">
-                  <label className="block text-sm text-neutral-400 mb-1">Blitz Cards Left (-2)</label>
-                  <input 
-                    type="number" 
-                    className="w-full p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50" 
-                    value={blitzCards} 
-                    onChange={(e) => setBlitzCards(e.target.value)} 
-                    onKeyDown={(e) => { if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault(); }}
-                    placeholder="0" 
-                    disabled={!!winner} 
-                  />
-                </div>
-                <div className="flex-1 w-full">
-                  <label className="block text-sm text-neutral-400 mb-1">Dutch Cards Played (+1)</label>
-                  <input 
-                    type="number" 
-                    className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" 
-                    value={dutchCards} 
-                    onChange={(e) => setDutchCards(e.target.value)} 
-                    onKeyDown={(e) => { if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault(); }}
-                    placeholder="0" 
-                    disabled={!!winner} 
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 w-full">
-                <label className="block text-sm text-neutral-400 mb-1">Total Round Score</label>
-                <input 
-                  type="number" 
-                  className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" 
-                  value={manualScore} 
-                  onChange={(e) => setManualScore(e.target.value)} 
-                  onKeyDown={(e) => { if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault(); }}
-                  placeholder="e.g. 14 or -4" 
-                  disabled={!!winner} 
-                />
-              </div>
-            )}
-
-            <div className="flex items-end w-full md:w-auto mt-2 md:mt-0 gap-2">
-              {winner && (
-                <button className="w-full md:w-auto p-3 px-6 h-[50px] rounded-lg font-bold transition shadow-lg bg-[#005ba1] hover:bg-blue-500 text-white" onClick={restartGame}>
-                  🔄 REMATCH
-                </button>
-              )}
-              <button className={`w-full md:w-auto p-3 px-8 h-[50px] rounded-lg font-bold transition shadow-lg ${winner ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed border border-neutral-700' : 'bg-[#4ade80] hover:bg-green-400 text-black'}`} onClick={submitScore} disabled={!!winner}>
-                {winner ? "GAME OVER" : "SUBMIT"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ScorePanel 
+          isManualMath={isManualMath} setIsManualMath={setIsManualMath}
+          manualScore={manualScore} setManualScore={setManualScore}
+          blitzCards={blitzCards} setBlitzCards={setBlitzCards}
+          dutchCards={dutchCards} setDutchCards={setDutchCards}
+          winner={winner}
+          restartGame={restartGame}
+          submitScore={submitScore}
+        />
 
         {/* Beautiful AI Recap Section */}
-        {aiEnabled && (
-          <div className="bg-neutral-900 p-1 rounded-xl bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-900 shadow-lg shadow-purple-900/20 mb-8">
-            <div className="bg-neutral-950 rounded-lg p-3 h-full w-full">
-              <button className={`p-3 rounded-lg font-bold transition-all w-full shadow-lg border border-purple-500/30 ${isGenerating ? "bg-neutral-900 animate-pulse text-purple-400" : "bg-purple-900/40 hover:bg-purple-800/60 text-purple-200"}`} onClick={generateAIRecap} disabled={isGenerating}>
-                {isGenerating ? "🎙️ Generating studio broadcast..." : "🎙️ Generate AI Match Recap"}
-              </button>
-
-              {recap && (
-                <div className="mt-4 p-4 bg-neutral-900/50 rounded-lg border border-purple-500/20 shadow-inner">
-                  <div className="flex items-center gap-2 mb-3 border-b border-purple-900/50 pb-2">
-                    <span className="text-xl">📻</span>
-                    <span className="font-bold text-purple-300 uppercase tracking-widest text-xs">Live Studio Broadcast</span>
-                  </div>
-                  <div className="pl-2 border-l-2 border-purple-500/50">
-                    {renderAIText(recap)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <AiRecap 
+          aiEnabled={aiEnabled} 
+          isGenerating={isGenerating} 
+          generateAIRecap={generateAIRecap} 
+          recap={recap} 
+        />
       </div>
     </div>
   );
