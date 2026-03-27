@@ -1,0 +1,176 @@
+# Contributing to Dutch Blitz Room Manager
+
+Thank you for your interest in contributing to **Dutch Blitz Room Manager**!
+
+This project is an open source, non-commercial full-stack application for managing real-time multiplayer scoring for the card game *Dutch Blitz*.
+
+We welcome improvements, bug fixes, documentation updates, and feature suggestions.
+
+---
+
+# License Agreement
+
+By contributing to this repository, you agree that your contributions will be released under the same license as the project:
+
+**Non-Commercial Open Source License (NC-OSL) Version 1.0**
+
+This means:
+
+* Contributions **cannot be used commercially**
+* Derivative works must be released under the **same license**
+* Proper **attribution must be preserved**
+
+See the full license in `LICENSE.md`.
+
+---
+
+# Ways to Contribute
+
+You can contribute in several ways:
+
+* Reporting bugs
+* Suggesting improvements
+* Improving documentation
+* Submitting code changes
+* Optimizing performance
+* Fixing UI or UX issues
+
+---
+
+# Reporting Issues
+
+Before creating a new issue:
+
+1. Check if the issue already exists
+2. Provide a clear description
+3. Include steps to reproduce
+4. Include screenshots or logs if relevant
+
+A helpful bug report usually includes:
+
+```
+Environment:
+OS:
+Browser:
+Steps to reproduce:
+Expected behavior:
+Actual behavior:
+```
+
+---
+
+# Development Setup
+
+Clone the repository:
+
+```
+git clone https://github.com/isaacmateosv/dutch-blitz-pj.git
+cd dutch-blitz-pj
+```
+
+---
+
+# Backend Development (FastAPI)
+
+Navigate to the backend:
+
+```
+cd dutch-blitz-api
+```
+
+Create a virtual environment:
+
+```
+python -m venv venv
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```
+pip install -r requirements.txt
+```
+
+Create a `.env` file with your credentials:
+
+```
+OPENAI_API_KEY=your_api_key
+DATABASE_URL=your_database_url
+```
+
+Run the development server:
+
+```
+uvicorn main:app --reload
+```
+
+---
+
+# Frontend Development (Next.js)
+
+Open another terminal and run:
+
+```
+cd dutch-blitz-ui
+npm install
+npm run dev
+```
+
+Then open:
+
+```
+http://localhost:3000
+```
+
+---
+
+# Coding Guidelines
+
+Please try to follow the existing style of the project.
+
+General recommendations:
+
+* Write clear and readable code
+* Keep functions focused and small
+* Avoid unnecessary dependencies
+* Add comments where logic is not obvious
+* Keep UI responsive and mobile-friendly
+
+---
+
+# Pull Request Process
+
+1. Fork the repository
+2. Create a feature branch
+
+```
+git checkout -b feature/my-improvement
+```
+
+3. Commit your changes
+
+```
+git commit -m "Improve score synchronization logic"
+```
+
+4. Push the branch
+
+```
+git push origin feature/my-improvement
+```
+
+5. Open a Pull Request with a clear description.
+
+---
+
+# Code of Conduct
+
+Be respectful and constructive.
+
+This project welcomes contributions from developers of all experience levels.
+
+---
+
+# Questions
+
+If you have questions about the project architecture or design decisions, feel free to open an issue.

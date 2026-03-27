@@ -7,12 +7,16 @@ export const metadata = {
   title: "Dutch Blitz Room",
   description: "Real-time multiplayer scoring",
   manifest: "/manifest.json",
-  themeColor: "#059669",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "BlitzRoom"
   }
+};
+
+// NEW: Next.js now requires themeColor to be exported here!
+export const viewport = {
+  themeColor: "#059669",
 };
 
 export default function RootLayout({ children }) {

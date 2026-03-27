@@ -21,9 +21,14 @@ export default function Home() {
   const [messages, setMessages] = useState([]);
 
   const [playerScores, setPlayerScores] = useState({});
-  const playerScoresRef = useRef({}); // NEW: Keeps track of scores for the WebSocket
+  const playerScoresRef = useRef({});
+
+  // --- NUEVO: Estado para manejar los AFK/Listo ---
+  const [playerStatuses, setPlayerStatuses] = useState({});
+  const playerStatusesRef = useRef({});
 
   const [winner, setWinner] = useState(null);
+  const winnerRef = useRef(null); // NUEVO: Para poder enviar al ganador por WebSocket
 
   const [isManualMath, setIsManualMath] = useState(true);
   const [manualScore, setManualScore] = useState("");
@@ -37,13 +42,61 @@ export default function Home() {
   const chatRef = useRef(null);
   const winnerDeclared = useRef(false);
 
-  useEffect(() => {
+useEffect(() => {
     hasLimitRef.current = hasLimit;
     targetScoreRef.current = targetScore;
-    playerScoresRef.current = playerScores; // NEW
-  }, [hasLimit, targetScore, playerScores]);
+    playerScoresRef.current = playerScores;
+    playerStatusesRef.current = playerStatuses; 
+    winnerRef.current = winner; 
 
-  // --- NEW: Procedural Audio Pop ---
+    if (isInRoomRef.current) {
+      sessionStorage.setItem("blitzScores", JSON.stringify(playerScores));
+      sessionStorage.setItem("blitzStatuses", JSON.stringify(playerStatuses));
+      sessionStorage.setItem("blitzRules", JSON.stringify({ hasLimit, targetScore }));
+      sessionStorage.setItem("blitzMessages", JSON.stringify(messages)); 
+      
+      // NUEVO: Si hay ganador lo guarda, si es null (reinicio), lo borra de la memoria
+      if (winner) sessionStorage.setItem("blitzWinner", winner); 
+      else sessionStorage.removeItem("blitzWinner"); 
+    }
+  }, [hasLimit, targetScore, playerScores, playerStatuses, messages, winner]);
+
+  // --- RECUPERACIÓN DE SESIÓN (ESTO ARREGLA EL F5) ---
+  // --- RECUPERACIÓN DE SESIÓN (SNAPSHOT TOTAL) ---
+  useEffect(() => {
+    const savedUser = sessionStorage.getItem("blitzUsername");
+    const savedRoom = sessionStorage.getItem("blitzRoomCode");
+    const savedScores = sessionStorage.getItem("blitzScores");
+    const savedStatuses = sessionStorage.getItem("blitzStatuses");
+    const savedRules = sessionStorage.getItem("blitzRules");
+    const savedMessages = sessionStorage.getItem("blitzMessages");
+    const savedWinner = sessionStorage.getItem("blitzWinner");
+
+    if (savedUser && savedRoom) {
+      setUsername(savedUser);
+      setRoomCode(savedRoom);
+      
+      if (savedScores) setPlayerScores(JSON.parse(savedScores));
+      if (savedStatuses) setPlayerStatuses(JSON.parse(savedStatuses));
+      if (savedMessages) setMessages(JSON.parse(savedMessages)); // Restaura el chat
+      
+      if (savedRules) {
+        const rules = JSON.parse(savedRules);
+        setHasLimit(rules.hasLimit);
+        setTargetScore(rules.targetScore);
+      }
+      
+      if (savedWinner) {
+        setWinner(savedWinner); // Restaura la UI de "GAME OVER"
+        winnerDeclared.current = true;
+      }
+      
+      setIsInRoom(true);
+      isInRoomRef.current = true;
+      connectWebSocket(savedRoom, savedUser);
+    }
+  }, []);
+
   const playPopSound = () => {
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -68,26 +121,31 @@ export default function Home() {
     }
   };
 
-  // --- NEW: Connection Resilience & Heartbeat Logic ---
-  const connectWebSocket = () => {
+  // --- ACTUALIZADO: Reconexión, IA y Estados AFK ---
+  const connectWebSocket = (currentRoom = roomCode, currentUser = username) => {
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
-    const socket = new WebSocket(`${wsUrl}/ws/${roomCode}/${username}`);
-    let pingInterval; // Variable to hold our heartbeat timer
+    const socket = new WebSocket(`${wsUrl}/ws/${currentRoom}/${currentUser}`);
+    let pingInterval;
 
     socket.onopen = () => {
-      // 1. Ask the room for the rules
       setTimeout(() => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "request_settings" }));
+          
+          // Anunciar mi estado inicial como "Jugando"
+          socket.send(JSON.stringify({ 
+            type: "status_update", 
+            username: currentUser, 
+            status: "🃏 Jugando" 
+          }));
         }
       }, 500);
 
-      // 2. Start the Heartbeat to prevent Render from killing the connection
       pingInterval = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "ping" }));
         }
-      }, 30000); // Sends a ping every 30 seconds
+      }, 30000);
     };
 
     socket.onmessage = (event) => {
@@ -96,31 +154,55 @@ export default function Home() {
 
         if (data.type === "system") {
           setMessages((prev) => [...prev, data.message]);
-          if (data.playerCount !== undefined) setOnlineCount(data.playerCount); // Force update count
+          if (data.playerCount !== undefined) setOnlineCount(data.playerCount);
+          
+          // Si alguien se va, limpiar su estado de la memoria
+          if (data.message.includes("left the table")) {
+             const leftUser = data.message.split(" ")[1];
+             setPlayerStatuses(prev => {
+                const newStatuses = {...prev};
+                delete newStatuses[leftUser];
+                return newStatuses;
+             });
+          }
         }
         else if (data.type === "request_settings") {
-          // If we are already in the room, send the new guy the rules AND the current scores!
+          // Mat envía la configuración a Cami
           if (isInRoomRef.current && ws.current?.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({
               type: "settings",
               hasLimit: hasLimitRef.current,
               targetScore: targetScoreRef.current,
-              playerScores: playerScoresRef.current // NEW: Send the scoreboard
+              playerScores: playerScoresRef.current,
+              playerStatuses: playerStatusesRef.current,
+              winner: winnerRef.current // NUEVO: Le decimos a Cami si alguien ya ganó
             }));
           }
         }
         else if (data.type === "settings") {
+          // Cami recibe la configuración de Mat
           setHasLimit(data.hasLimit);
           setTargetScore(data.targetScore);
 
-          // NEW: If we just joined (our scoreboard is empty) but the room has active scores, adopt them!
           if (data.playerScores && Object.keys(playerScoresRef.current).length === 0) {
             setPlayerScores(data.playerScores);
           }
+          if (data.playerStatuses) {
+            setPlayerStatuses(prev => ({...prev, ...data.playerStatuses}));
+          }
+          
+          // NUEVO: Si el juego ya terminó, bloquearle la pantalla a Cami inmediatamente
+          if (data.winner) {
+            setWinner(data.winner);
+            winnerDeclared.current = true;
+          }
         }
         else if (data.type === "pong") {
-          // Optional: Just silently catch the server's pong response
           return;
+        }
+        else if (data.type === "status_update") {
+          // Actualizar el estado AFK de un jugador
+          setPlayerStatuses(prev => ({...prev, [data.username]: data.status}));
         }
         else if (data.type === "score") {
           playPopSound();
@@ -146,19 +228,41 @@ export default function Home() {
             return { ...prevScores, [data.username]: newTotal };
           });
         }
+        else if (data.type === "ai_recap_broadcast") {
+          setIsGenerating(false);
+          setRecap(`🎙️ AI Announcer: "${data.message}"`);
+        }
+        // ... otros else if ...
+        else if (data.type === "restart_game") {
+          // 1. Convertir todos los puntajes actuales a 0
+          setPlayerScores((prev) => {
+            const resetScores = {};
+            Object.keys(prev).forEach(player => {
+              resetScores[player] = 0;
+            });
+            return resetScores;
+          });
+          
+          // 2. Limpiar el ganador y desbloquear la UI
+          setWinner(null);
+          winnerDeclared.current = false;
+          
+          // 3. Anunciar en el chat
+          setMessages((prev) => [...prev, `🔄 ${data.username} restarted the game! All scores reset to 0.`]);
+          playPopSound(); // Un ruidito para avisar que empezó una nueva ronda
+        }
       } catch (e) {
         setMessages((prev) => [...prev, event.data]);
       }
     };
 
     socket.onclose = () => {
-      clearInterval(pingInterval); // Stop pinging if the connection dies
+      clearInterval(pingInterval);
 
-      // Attempt auto-reconnect if it wasn't a deliberate quit
       if (isInRoomRef.current && !winnerDeclared.current) {
         setMessages((prev) => [...prev, `⚠️ Connection lost. Reconnecting...`]);
         setTimeout(() => {
-          connectWebSocket();
+          connectWebSocket(currentRoom, currentUser);
         }, 3000);
       }
     };
@@ -168,9 +272,39 @@ export default function Home() {
 
   const joinRoom = () => {
     if (!username || !roomCode) return;
+    
+    // Guardar en sesión
+    sessionStorage.setItem("blitzUsername", username);
+    sessionStorage.setItem("blitzRoomCode", roomCode);
+
     setIsInRoom(true);
     isInRoomRef.current = true;
-    connectWebSocket();
+    connectWebSocket(roomCode, username);
+  };
+
+  // --- FUNCIÓN PARA SALIR DE LA SALA ---
+  // --- FUNCIÓN PARA SALIR DE LA SALA ---
+  // --- FUNCIÓN PARA SALIR DE LA SALA ---
+  const leaveRoom = () => {
+    // Limpiar toda la memoria del navegador
+    sessionStorage.removeItem("blitzUsername");
+    sessionStorage.removeItem("blitzRoomCode");
+    sessionStorage.removeItem("blitzScores");
+    sessionStorage.removeItem("blitzStatuses");
+    sessionStorage.removeItem("blitzRules");
+    sessionStorage.removeItem("blitzMessages");
+    sessionStorage.removeItem("blitzWinner");
+    
+    setIsInRoom(false);
+    isInRoomRef.current = false;
+    if (ws.current) ws.current.close();
+    
+    setMessages([]);
+    setPlayerScores({});
+    setPlayerStatuses({});
+    setWinner(null);
+    winnerDeclared.current = false;
+    setUsername("");
   };
 
   useEffect(() => {
@@ -186,34 +320,51 @@ export default function Home() {
 
   const broadcastNewSettings = () => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ type: "settings", hasLimit, targetScore }));
+      ws.current.send(JSON.stringify({ type: "settings", hasLimit, targetScore, playerScores: playerScoresRef.current, playerStatuses: playerStatusesRef.current }));
       ws.current.send(JSON.stringify({ type: "system", message: `⚙️ ${username} updated the room rules: ${hasLimit ? `First to ${targetScore}` : 'Endless Mode'}.` }));
     }
     setShowSettings(false);
   };
 
+  // --- NUEVO: Enviar cambio de estado AFK ---
+  const handleStatusChange = (e) => {
+    const newStatus = e.target.value;
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({
+        type: "status_update",
+        username: username,
+        status: newStatus
+      }));
+    }
+  };
+
   const generateAIRecap = async () => {
     setIsGenerating(true);
-    setRecap("");
-    try {
+
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       const formattedScores = Object.entries(playerScores).map(([name, score]) => ({
         player_name: name,
         total_score: score
       }));
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || `http://${window.location.hostname}:8000`;
-      const response = await fetch(`${apiUrl}/generate-recap/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ room_code: roomCode, scores: formattedScores }),
-      });
-
-      const data = await response.json();
-      setRecap(data.recap);
-    } catch (error) {
-      setRecap("Connection lost to the AI Announcer.");
+      ws.current.send(JSON.stringify({
+        type: "request_ai_recap",
+        scores: formattedScores
+      }));
+    } else {
+      setRecap("Error: No estás conectado a la sala.");
+      setIsGenerating(false);
     }
-    setIsGenerating(false);
+  };
+
+  // --- NUEVO: Función para reiniciar el juego ---
+  const restartGame = () => {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({
+        type: "restart_game",
+        username: username
+      }));
+    }
   };
 
   const submitScore = () => {
@@ -296,7 +447,24 @@ export default function Home() {
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-bold">Room: <span className="text-emerald-500">{roomCode}</span></h2>
+              
+              {/* SELECTOR DE ESTADO AFK/LISTO */}
+              <select 
+                className="bg-neutral-800 text-xs p-1 rounded border border-neutral-700 focus:outline-none"
+                value={playerStatuses[username] || "🃏 Jugando"}
+                onChange={handleStatusChange}
+              >
+                <option value="🃏 Jugando">🃏 Jugando</option>
+                <option value="🟡 AFK">🟡 AFK</option>
+                <option value="👀 Espectando">👀 Espectando</option>
+                <option value="✅ Listo">✅ Listo</option>
+              </select>
+
               <button onClick={() => setShowSettings(!showSettings)} className="bg-neutral-800 hover:bg-neutral-700 p-1.5 rounded-md transition text-sm" title="Room Settings">⚙️</button>
+              
+              <button onClick={leaveRoom} className="bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-900 p-1.5 px-3 rounded-md transition text-sm font-bold ml-2">
+                🚪 Salir
+              </button>
             </div>
             <div className="flex items-center gap-3 mt-1">
               <p className="text-sm text-neutral-400">{hasLimit ? `First to ${targetScore} wins` : "Endless Mode"}</p>
@@ -308,7 +476,8 @@ export default function Home() {
           </div>
           <div className="flex gap-2 flex-wrap">
             {Object.entries(playerScores).map(([name, score]) => (
-              <span key={name} className="bg-neutral-800 px-3 py-1 rounded-full text-sm font-bold border border-neutral-700 shadow-sm">
+              <span key={name} className="bg-neutral-800 px-3 py-1 rounded-full text-sm font-bold border border-neutral-700 shadow-sm flex items-center gap-1">
+                <span className="text-xs opacity-80">{playerStatuses[name] || "🃏 Jugando"}</span>
                 {name}: <span className={score >= 0 ? "text-emerald-400" : "text-red-400"}>{score}</span>
               </span>
             ))}
@@ -373,8 +542,18 @@ export default function Home() {
               </div>
             )}
 
-            <div className="flex items-end w-full md:w-auto mt-2 md:mt-0">
-              <button className={`w-full md:w-auto p-3 px-8 h-[50px] rounded-lg font-bold transition shadow-lg ${winner ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`} onClick={submitScore} disabled={!!winner}>
+            <div className="flex items-end w-full md:w-auto mt-2 md:mt-0 gap-2">
+              {/* BOTÓN DE REINICIO (Solo visible si hay un ganador) */}
+              {winner && (
+                <button 
+                  className="w-full md:w-auto p-3 px-6 h-[50px] rounded-lg font-bold transition shadow-lg bg-blue-600 hover:bg-blue-500 text-white border border-blue-500" 
+                  onClick={restartGame}
+                >
+                  🔄 REMATCH
+                </button>
+              )}
+              
+              <button className={`w-full md:w-auto p-3 px-8 h-[50px] rounded-lg font-bold transition shadow-lg ${winner ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed border border-neutral-700' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`} onClick={submitScore} disabled={!!winner}>
                 {winner ? "GAME OVER" : "SUBMIT"}
               </button>
             </div>

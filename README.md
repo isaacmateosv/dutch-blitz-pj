@@ -87,3 +87,11 @@ You are free to **Share** (copy and redistribute the material in any medium or f
 **No Warranties:** The Software is provided "AS IS", without warranty of any kind. 
 
 *For the complete legal code and footnotes, please consult the `LICENSE.md` file included in this repository.*
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome.
+
+Please read the guidelines in [CONTRIBUTING.md](CONTRIBUTING.md).

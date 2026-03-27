@@ -150,3 +150,14 @@ coverage/
 .cache/
 .parcel-cache/
 .eslintcache
+
+# =====================================
+# You gotta be careful with secrets lol
+# =====================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials/
