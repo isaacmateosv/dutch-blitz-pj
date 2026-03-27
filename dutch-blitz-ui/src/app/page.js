@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import RoomSettings from "../components/RoomSettings"; // <--- AÑADE ESTO
 
 const EMOJIS = ["👾", "🦊", "🐶", "🐱", "🐰", "🐼", "🐯", "🐸", "🦄", "👽", "👻", "🤖", "🤡", "👹", "👑", "🔥", "🐳", "🫍"];
 
@@ -390,10 +391,25 @@ export default function Home() {
 
   useEffect(() => { chatRef.current?.scrollTo(0, chatRef.current.scrollHeight); }, [messages]);
 
-  const broadcastNewSettings = () => {
+const broadcastNewSettings = (newScore, newAi) => {
+    setTargetScore(newScore);
+    setAiEnabled(newAi);
+
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ type: "settings", hasLimit, targetScore, aiEnabled, playerScores: playerScoresRef.current, playerStatuses: playerStatusesRef.current, winner: winnerRef.current }));
-      ws.current.send(JSON.stringify({ type: "system", message: `⚙️ ${username} updated the room rules: ${hasLimit ? `First to ${targetScore}` : 'Endless Mode'}.` }));
+      ws.current.send(JSON.stringify({ 
+        type: "settings", 
+        targetScore: newScore, 
+        aiEnabled: newAi, 
+        playerScores: playerScoresRef.current, 
+        playerStatuses: playerStatusesRef.current, 
+        winner: winnerRef.current 
+      }));
+      
+      const aiMsg = newAi ? '🎙️ AI ON' : '🚫 AI OFF';
+      ws.current.send(JSON.stringify({ 
+        type: "system", 
+        message: `⚙️ ${username} updated the room rules: [First to ${newScore}] | [${aiMsg}]` 
+      }));
     }
     setShowSettings(false);
   };
@@ -569,7 +585,9 @@ export default function Home() {
                 <button onClick={leaveRoom} className="bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-900 p-1.5 px-3 rounded-md transition text-sm font-bold ml-2">🚪 Salir</button>
               </div>
               <div className="flex items-center gap-3 mt-1">
-                <p className="text-sm text-neutral-400">{hasLimit ? `First to ${targetScore} wins` : "Endless Mode"}</p>
+                {/* FIX: Texto fijo, ya no preguntamos por Endless Mode */}
+                <p className="text-sm text-neutral-400">First to {targetScore} wins</p>
+                
                 <span className="bg-blue-900/30 text-blue-400 border border-blue-800/50 px-2 py-0.5 rounded text-xs font-bold flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> {onlineCount} Online
                 </span>
@@ -620,64 +638,17 @@ export default function Home() {
 
         {/* IN-GAME SETTINGS */}
         {showSettings && (
-          <div className="bg-neutral-900 border border-neutral-700 p-4 rounded-xl flex flex-col gap-4 shadow-lg">
-            <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
-              <h3 className="font-bold text-white flex items-center gap-2">⚙️ Room Settings</h3>
-              <button onClick={() => setShowSettings(false)} className="bg-neutral-800 hover:bg-red-900/50 text-neutral-400 hover:text-red-400 rounded-full w-8 h-8 flex items-center justify-center transition" title="Close Settings">
-                ✕
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-3 border-b border-neutral-800 pb-4">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-bold text-neutral-300">Enable Score Limit</label>
-                <input type="checkbox" className="w-5 h-5 accent-[#4ade80] rounded cursor-pointer" checked={hasLimit} onChange={(e) => setHasLimit(e.target.checked)} disabled={!!winner} />
-              </div>
-              <div className="flex items-center justify-between border-t border-neutral-800 pt-3 mt-1">
-                <label className="text-sm font-bold text-neutral-300">Enable AI Features 🎙️</label>
-                <input type="checkbox" className="w-5 h-5 accent-purple-500 rounded cursor-pointer" checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />
-              </div>
-              {hasLimit && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-neutral-500 uppercase tracking-wider">Target Score to Win</label>
-                  <input 
-                    type="number" 
-                    className="p-2 bg-neutral-950 rounded focus:outline-none focus:ring-1 focus:ring-[#4ade80] transition text-sm font-bold" 
-                    value={targetScore} 
-                    onChange={(e) => setTargetScore(e.target.value === "" ? "" : parseInt(e.target.value))} 
-                    onBlur={() => { if (targetScore === "" || targetScore <= 0) setTargetScore(75); }}
-                    onKeyDown={(e) => { if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault(); }}
-                    disabled={!!winner} 
-                  />
-                </div>
-              )}
-              <button className="bg-neutral-800 hover:bg-neutral-700 text-sm font-bold p-2 rounded transition mt-1" onClick={broadcastNewSettings} disabled={!!winner}>Save & Broadcast</button>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-xs text-neutral-500 uppercase tracking-wider">Manage Players (Kick Ghosts)</label>
-              <div className="bg-neutral-950 p-2 rounded-lg border border-neutral-800 flex flex-col gap-1 max-h-32 overflow-y-auto">
-                {Object.keys(playerScores).length === 0 ? (
-                  <span className="text-xs text-neutral-600 italic">No players available to kick.</span>
-                ) : (
-                  Object.keys(playerScores).map(player => (
-                    <div key={player} className="flex justify-between items-center bg-neutral-900 px-3 py-1.5 rounded">
-                      <span className={`text-sm ${getUserColor(player)}`}>{player}</span>
-                      
-                      {/* FIX: Ocultar botón de kick para ti mismo */}
-                      {player !== username ? (
-                        <button onClick={() => kickPlayer(player)} className="text-xs bg-red-900/40 hover:bg-red-600 text-red-200 px-2 py-1 rounded transition border border-red-900/50">
-                          Kick
-                        </button>
-                      ) : (
-                        <span className="text-[10px] text-neutral-500 uppercase tracking-widest font-bold">(You)</span>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+          <RoomSettings
+            currentTargetScore={targetScore}
+            currentAiEnabled={aiEnabled}
+            winner={winner}
+            username={username}
+            playerScores={playerScores}
+            getUserColor={getUserColor}
+            kickPlayer={kickPlayer}
+            onClose={() => setShowSettings(false)}
+            onSave={broadcastNewSettings}
+          />
         )}
 
         {/* Chat */}
