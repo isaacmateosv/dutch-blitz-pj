@@ -1,8 +1,6 @@
-export default function AiRecap({ aiEnabled, isGenerating, generateAIRecap, recap }) {
-  // Si la IA está apagada, no renderizamos nada
+export default function AiRecap({ t, aiEnabled, isGenerating, generateAIRecap, recap }) {
   if (!aiEnabled) return null;
 
-  // La función de formateo ahora vive exclusivamente aquí
   const renderAIText = (text) => {
     const cleanText = text.replace(/^"|"$/g, '');
     return cleanText.split('\n').map((line, i) => {
@@ -24,14 +22,14 @@ export default function AiRecap({ aiEnabled, isGenerating, generateAIRecap, reca
           onClick={generateAIRecap} 
           disabled={isGenerating}
         >
-          {isGenerating ? "🎙️ Generating studio broadcast..." : "🎙️ Generate AI Match Recap"}
+          {isGenerating ? t.ai.generatingBtn : t.ai.generateBtn}
         </button>
 
         {recap && (
           <div className="mt-4 p-4 bg-neutral-900/50 rounded-lg border border-purple-500/20 shadow-inner">
             <div className="flex items-center gap-2 mb-3 border-b border-purple-900/50 pb-2">
               <span className="text-xl">📻</span>
-              <span className="font-bold text-purple-300 uppercase tracking-widest text-xs">Live Studio Broadcast</span>
+              <span className="font-bold text-purple-300 uppercase tracking-widest text-xs">{t.ai.liveBroadcast}</span>
             </div>
             <div className="pl-2 border-l-2 border-purple-500/50">
               {renderAIText(recap)}

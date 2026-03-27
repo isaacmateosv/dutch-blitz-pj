@@ -3,7 +3,6 @@ import { useEffect, useRef } from "react";
 export default function ChatBox({ messages, playerScores, getUserColor }) {
   const chatRef = useRef(null);
 
-  // Auto-scroll hacia abajo cuando llega un mensaje nuevo
   useEffect(() => { 
     chatRef.current?.scrollTo(0, chatRef.current.scrollHeight); 
   }, [messages]);
@@ -13,33 +12,28 @@ export default function ChatBox({ messages, playerScores, getUserColor }) {
       return <span className="text-amber-400 font-extrabold text-base tracking-wide drop-shadow-md">{text}</span>;
     }
 
-    let userColor = "text-white";
-    const players = Object.keys(playerScores);
+    const players = Object.keys(playerScores).sort((a, b) => b.length - a.length);
     const sender = players.find(p => text.includes(p));
-    
-    if (sender) userColor = getUserColor(sender);
 
-    if (text.includes(" | ")) {
-      const parts = text.split(" | ");
-      if (sender && parts[0].startsWith(sender)) {
-         const actionText = parts[0].substring(sender.length).trim();
-         return (
-           <>
-             <span className={`font-bold ${userColor}`}>{sender}</span>
-             <span className="font-bold text-neutral-200 ml-1">{actionText}</span>
-             <span className="font-mono text-neutral-500 text-[11px] ml-2">{parts[1]}</span>
-           </>
-         );
-      }
-      
+    if (sender) {
+      const parts = text.split(sender);
       return (
-        <>
-          <span className={`font-bold ${userColor}`}>{parts[0]}</span>
-          <span className="font-mono text-neutral-500 text-[11px] ml-2">{parts[1]}</span>
-        </>
+        <span className="text-neutral-300">
+          {parts[0]}
+          <span className={`font-bold ${getUserColor(sender)}`}>{sender}</span>
+          {/* El secreto del espacio: un nodo de texto explícito */}
+          {" "}
+          {parts[1] ? parts[1].trim() : ""}
+          {text.includes(" | ") && (
+             <span className="font-mono text-neutral-500 text-[11px] ml-2">
+               | {text.split(" | ")[1]}
+             </span>
+          )}
+        </span>
       );
     }
-    return <span className={sender ? userColor : "text-neutral-300"}>{text}</span>;
+
+    return <span className="text-neutral-300">{text}</span>;
   };
 
   return (
@@ -66,12 +60,7 @@ export default function ChatBox({ messages, playerScores, getUserColor }) {
         return (
           <div key={key} className="p-3 rounded-xl w-fit max-w-[90%] md:max-w-[80%] text-sm md:text-base bg-neutral-800/50 border border-neutral-700/50 shadow-sm flex items-center">
             {renderMessage(text)}
-            
-            {count > 1 && (
-              <span className="ml-2 bg-neutral-700 text-white font-bold text-[10px] px-1.5 py-0.5 rounded-full">
-                x{count}
-              </span>
-            )}
+            {count > 1 && <span className="ml-2 bg-neutral-700 text-white font-bold text-[10px] px-1.5 py-0.5 rounded-full">x{count}</span>}
           </div>
         );
       })}

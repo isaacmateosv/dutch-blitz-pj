@@ -3,6 +3,7 @@
 const EMOJIS = ["👾", "🦊", "🐶", "🐱", "🐰", "🐼", "🐯", "🐸", "🦄", "👽", "👻", "🤖", "🤡", "👹", "👑", "🔥", "🐳", "🫍", "💯", "💩", "💀", "🐢", "🐺", "🦖", "🐝"];
 
 export default function Lobby({
+    t,
     rawUsername, setRawUsername,
     selectedEmoji, setSelectedEmoji,
     roomCode, setRoomCode,
@@ -18,10 +19,9 @@ export default function Lobby({
                     BLITZ<span className="text-white">ROOM</span>
                 </h1>
 
-                {/* Alerta de inactividad */}
                 {inactivityAlert && (
                     <div className="bg-red-900/40 border border-red-500/50 text-red-200 p-3 rounded-lg text-sm text-center font-medium animate-pulse shadow-lg mb-2">
-                        {inactivityAlert}
+                        {inactivityAlert === "timeout" ? t.lobby.inactivity : inactivityAlert}
                     </div>
                 )}
 
@@ -35,7 +35,7 @@ export default function Lobby({
                     </select>
                     <input
                         className="p-3 bg-neutral-800 rounded-md focus:outline-none focus:ring-2 focus:ring-[#fbd304] transition lowercase w-full"
-                        placeholder="username"
+                        placeholder={t.lobby.username}
                         value={rawUsername}
                         onChange={(e) => setRawUsername(e.target.value)}
                         autoCapitalize="none" autoCorrect="off" spellCheck="false"
@@ -45,7 +45,7 @@ export default function Lobby({
                 <div className="flex flex-col">
                     <input
                         className="p-3 bg-neutral-800 rounded-md focus:outline-none focus:ring-2 focus:ring-[#fbd304] transition lowercase"
-                        placeholder="room code"
+                        placeholder={t.lobby.room}
                         value={roomCode}
                         onChange={(e) => setRoomCode(e.target.value.toLowerCase())}
                         autoCapitalize="none" autoCorrect="off" spellCheck="false"
@@ -67,7 +67,7 @@ export default function Lobby({
 
                 <div className="bg-neutral-950 p-4 rounded-lg border border-neutral-800 mt-2 flex flex-col gap-3">
                     <div className="flex flex-col gap-1">
-                        <label className="text-xs text-neutral-500 uppercase tracking-wider">Target Score to Win (Min 75)</label>
+                        <label className="text-xs text-neutral-500 uppercase tracking-wider">{t.lobby.targetScore}</label>
                         <input
                             type="number"
                             min="75"
@@ -84,7 +84,7 @@ export default function Lobby({
                     className="p-3 bg-[#005ba1] hover:bg-blue-600 rounded-md font-bold tracking-wide transition shadow-lg mt-2"
                     onClick={() => joinRoom(roomCode)}
                 >
-                    JOIN LOBBY
+                    {t.lobby.joinBtn}
                 </button>
             </div>
         </div>
