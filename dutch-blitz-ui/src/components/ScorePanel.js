@@ -23,7 +23,7 @@ export default function ScorePanel({
     return (
       <div className="bg-neutral-900 p-6 rounded-xl border border-blue-900/50 shadow-lg flex flex-col items-center justify-center gap-4 text-center">
         <h3 className="text-xl font-bold text-blue-400">{t.ready.waiting}</h3>
-        
+
         <div className="flex gap-3 flex-wrap justify-center my-2">
           {players.map(p => (
             <span key={p} className={`px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition-all ${playerReady[p] ? 'bg-green-900/40 text-green-400 border border-green-800/50' : 'bg-neutral-800 text-neutral-500 border border-neutral-700'}`}>
@@ -42,7 +42,7 @@ export default function ScorePanel({
     );
   }
 
-  // SI TODOS ESTÁN LISTOS, RETORNAMOS EL PANEL DE PUNTAJES NORMAL QUE YA SE TENÍA:
+  // SI TODOS ESTÁN LISTOS, RETORNAMOS EL PANEL DE PUNTAJES NORMAL:
   return (
     <div className={`flex flex-col gap-4 w-full bg-neutral-900 p-4 rounded-xl border transition ${winner ? 'border-amber-500/50 shadow-lg shadow-amber-900/20' : 'border-neutral-800/60'}`}>
       <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-1">
@@ -54,58 +54,70 @@ export default function ScorePanel({
         </label>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4">
+      {/* 🔥 FIX: Changed to flex-row and items-end to keep everything on one horizontal line */}
+      <div className="flex flex-row items-end gap-2 w-full">
         {!isManualMath ? (
           <>
-            <div className="flex-1 w-full">
-              <label className="block text-sm text-neutral-400 mb-1">{t.score.blitzLeft}</label>
-              <input 
-                type="number" 
-                className="w-full p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50" 
-                value={blitzCards} 
-                onChange={(e) => setBlitzCards(e.target.value)} 
-                onKeyDown={(e) => { if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault(); }}
-                placeholder="0" 
-                disabled={!!winner} 
+            <div className="flex-1">
+              <label className="block text-[10px] md:text-xs text-neutral-400 mb-1 truncate">{t.score.blitzLeft}</label>
+              <input
+                type="number"
+                className="w-full p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50"
+                value={blitzCards}
+                onChange={(e) => setBlitzCards(e.target.value)}
+                onKeyDown={(e) => {
+                  if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault();
+                  if (e.key === 'Enter') submitScore(); // 🔥 FIX: Enter key triggers submit
+                }}
+                placeholder="0"
+                disabled={!!winner}
               />
             </div>
-            <div className="flex-1 w-full">
-              <label className="block text-sm text-neutral-400 mb-1">{t.score.dutchPlayed}</label>
-              <input 
-                type="number" 
-                className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" 
-                value={dutchCards} 
-                onChange={(e) => setDutchCards(e.target.value)} 
-                onKeyDown={(e) => { if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault(); }}
-                placeholder="0" 
-                disabled={!!winner} 
+            <div className="flex-1">
+              <label className="block text-[10px] md:text-xs text-neutral-400 mb-1 truncate">{t.score.dutchPlayed}</label>
+              <input
+                type="number"
+                className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50"
+                value={dutchCards}
+                onChange={(e) => setDutchCards(e.target.value)}
+                onKeyDown={(e) => {
+                  if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault();
+                  if (e.key === 'Enter') submitScore(); // 🔥 FIX: Enter key triggers submit
+                }}
+                placeholder="0"
+                disabled={!!winner}
               />
             </div>
           </>
         ) : (
-          <div className="flex-1 w-full">
-            <label className="block text-sm text-neutral-400 mb-1">{t.score.totalRound}</label>
-            <input 
-              type="number" 
-              className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50" 
-              value={manualScore} 
-              onChange={(e) => setManualScore(e.target.value)} 
-              onKeyDown={(e) => { if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault(); }}
-              placeholder="e.g. 14 or -4" 
-              disabled={!!winner} 
+          <div className="flex-1">
+            <label className="block text-[10px] md:text-xs text-neutral-400 mb-1">{t.score.totalRound}</label>
+            <input
+              type="number"
+              className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50"
+              value={manualScore}
+              onChange={(e) => setManualScore(e.target.value)}
+              onKeyDown={(e) => {
+                if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault();
+                if (e.key === 'Enter') submitScore(); // 🔥 FIX: Enter key triggers submit
+              }}
+              placeholder="e.g. 14 or -4"
+              disabled={!!winner}
             />
           </div>
         )}
 
-        <div className="flex items-end w-full md:w-auto mt-2 md:mt-0 gap-2">
-          {winner && (
-            <button className="w-full md:w-auto p-3 px-6 h-[50px] rounded-lg font-bold transition shadow-lg bg-[#005ba1] hover:bg-blue-500 text-white" onClick={restartGame}>
+        {/* 🔥 FIX: Button is now a fixed width on the right side */}
+        <div className="shrink-0 w-24 md:w-32">
+          {winner ? (
+            <button className="w-full p-3 h-[50px] rounded-lg font-bold transition shadow-lg bg-[#005ba1] hover:bg-blue-500 text-white text-xs md:text-sm" onClick={restartGame}>
               {t.score.rematchBtn}
             </button>
+          ) : (
+            <button className="w-full p-3 h-[50px] rounded-lg font-bold transition shadow-lg bg-[#4ade80] hover:bg-green-400 text-black text-xs md:text-sm" onClick={submitScore} disabled={!!winner}>
+              {t.score.submitBtn}
+            </button>
           )}
-          <button className={`w-full md:w-auto p-3 px-8 h-[50px] rounded-lg font-bold transition shadow-lg ${winner ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed border border-neutral-700' : 'bg-[#4ade80] hover:bg-green-400 text-black'}`} onClick={submitScore} disabled={!!winner}>
-            {winner ? t.score.gameOver : t.score.submitBtn}
-          </button>
         </div>
       </div>
     </div>

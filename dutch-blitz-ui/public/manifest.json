@@ -8,7 +8,7 @@
   "theme_color": "#059669",
   "icons": [
     {
-      "src": "https://www.svgrepo.com/show/309489/cards-playing.svg",
+      "src": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f0cf.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"

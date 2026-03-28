@@ -1,11 +1,9 @@
 import { useState } from "react";
 
 export default function RoomSettings({
-    t, // <--- RECIBE LA TRADUCCIÓN
-    currentTargetScore, currentAiEnabled,
-    winner, username, playerScores,
-    getUserColor, kickPlayer,
-    onClose, onSave
+    t, currentTargetScore, currentAiEnabled, winner, username, playerScores,
+    getUserColor, kickPlayer, onClose, onSave,
+    destroyRoom // <--- NUEVA PROP AQUÍ
 }) {
     const [draftScore, setDraftScore] = useState(currentTargetScore);
     const [draftAi, setDraftAi] = useState(currentAiEnabled);
@@ -73,6 +71,16 @@ export default function RoomSettings({
                         ))
                     )}
                 </div>
+            </div>
+            {/* DANGER ZONE */}
+            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-red-900/30">
+                <label className="text-[10px] text-red-500 uppercase tracking-widest font-black">Danger Zone</label>
+                <button
+                    onClick={destroyRoom}
+                    className="bg-red-950/50 hover:bg-red-600 text-red-400 hover:text-white border border-red-900/50 p-2 rounded transition text-sm font-bold flex justify-center items-center gap-2"
+                >
+                    <span>🗑️</span> Delete Room & History
+                </button>
             </div>
         </div>
     );

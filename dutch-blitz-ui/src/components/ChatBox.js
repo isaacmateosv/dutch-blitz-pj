@@ -3,8 +3,8 @@ import { useEffect, useRef } from "react";
 export default function ChatBox({ messages, playerScores, getUserColor }) {
   const chatRef = useRef(null);
 
-  useEffect(() => { 
-    chatRef.current?.scrollTo(0, chatRef.current.scrollHeight); 
+  useEffect(() => {
+    chatRef.current?.scrollTo(0, chatRef.current.scrollHeight);
   }, [messages]);
 
   const renderMessage = (text) => {
@@ -17,17 +17,20 @@ export default function ChatBox({ messages, playerScores, getUserColor }) {
 
     if (sender) {
       const parts = text.split(sender);
+      // 🔥 FIX: We cut off the redundant text from the main message
+      const mainText = parts[1] ? parts[1].split(" | ")[0].trim() : "";
+      const smallTag = text.includes(" | ") ? text.split(" | ")[1] : null;
+
       return (
         <span className="text-neutral-300">
           {parts[0]}
           <span className={`font-bold ${getUserColor(sender)}`}>{sender}</span>
-          {/* El secreto del espacio: un nodo de texto explícito */}
           {" "}
-          {parts[1] ? parts[1].trim() : ""}
-          {text.includes(" | ") && (
-             <span className="font-mono text-neutral-500 text-[11px] ml-2">
-               | {text.split(" | ")[1]}
-             </span>
+          {mainText}
+          {smallTag && (
+            <span className="font-mono text-neutral-500 text-[11px] ml-2 block sm:inline mt-1 sm:mt-0">
+              | {smallTag}
+            </span>
           )}
         </span>
       );
@@ -42,7 +45,7 @@ export default function ChatBox({ messages, playerScores, getUserColor }) {
         const text = typeof msg === 'string' ? msg : msg.text;
         const key = typeof msg === 'string' ? Math.random() : msg.id;
         const count = typeof msg === 'string' ? 1 : (msg.count || 1);
-        
+
         const isSystemEvent = text.includes("joined") || text.includes("left") || text.includes("restarted");
 
         if (isSystemEvent) {
@@ -50,7 +53,7 @@ export default function ChatBox({ messages, playerScores, getUserColor }) {
           return (
             <div key={key} className="w-full flex justify-center my-1 opacity-80">
               <span className="text-xs text-neutral-400 bg-neutral-950 px-5 py-2 rounded-full border border-neutral-800/80 shadow-sm flex items-center">
-                {cleanText} 
+                {cleanText}
                 {count > 1 && <span className="font-bold ml-2 bg-neutral-800 text-neutral-300 px-1.5 py-0.5 rounded text-[10px]">x{count}</span>}
               </span>
             </div>

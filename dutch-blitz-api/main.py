@@ -114,6 +114,17 @@ def save_game_recap(recap: MatchRecapRequest, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "message": "Match results archived!"}
 
+@app.delete("/rooms/{room_code}")
+def delete_room(room_code: str, db: Session = Depends(get_db)):
+    db_room = db.query(models.Room).filter(models.Room.room_code == room_code).first()
+    if not db_room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    # Gracias al cascade en models.py, esto borra la sala y TODOS sus puntajes
+    db.delete(db_room)
+    db.commit()
+    return {"status": "success", "message": "Room obliterated."}
+
 @app.get("/rooms/{room_code}/history/")
 def get_room_history(room_code: str, db: Session = Depends(get_db)):
     # Find the room first
