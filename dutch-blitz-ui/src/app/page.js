@@ -138,6 +138,8 @@ export default function Home() {
           blitzCards={engine.blitzCards} setBlitzCards={engine.setBlitzCards} dutchCards={engine.dutchCards} setDutchCards={engine.setDutchCards}
           winner={engine.winner} restartGame={engine.restartGame} submitScore={engine.submitScore}
           playerReady={engine.playerReady} username={username} toggleReady={() => engine.toggleReady(t.ready.isReadyMsg, t.ready.notReadyMsg)} playerScores={engine.playerScores}
+          lastSubmittedScore={engine.lastSubmittedScore}
+          undoScore={engine.undoScore}
         />
 
         <AiRecap t={t} aiEnabled={engine.aiEnabled} isGenerating={engine.isGenerating} generateAIRecap={engine.generateAIRecap} recap={engine.recap} />

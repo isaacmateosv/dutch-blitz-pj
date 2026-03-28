@@ -29,7 +29,7 @@ export const dict = {
     },
     score: {
       inputMethod: "Score Input Method",
-      manualMath: "Manual Math",
+      manualMath: "Mental Math",
       autoMath: "Calculate for me",
       blitzLeft: "Blitz Cards Left (-2)",
       dutchPlayed: "Dutch Cards Played (+1)",
@@ -39,7 +39,7 @@ export const dict = {
       gameOver: "GAME OVER"
     },
     ai: {
-      generateBtn: "🎙️ Generate AI Match Recap",
+      generateBtn: "🎙️ Generate Match Recap",
       generatingBtn: "🎙️ Generating studio broadcast...",
       liveBroadcast: "Live Studio Broadcast"
     },
@@ -80,8 +80,8 @@ export const dict = {
     },
     score: {
       inputMethod: "Método de Puntaje",
-      manualMath: "Cálculo Manual",
-      autoMath: "Calcular por mí",
+      manualMath: "Cálculo Mental",
+      autoMath: "Calcula por mí",
       blitzLeft: "Cartas Blitz Restantes (-2)",
       dutchPlayed: "Cartas Dutch Jugadas (+1)",
       totalRound: "Puntaje de la Ronda",
@@ -90,7 +90,7 @@ export const dict = {
       gameOver: "FIN DEL JUEGO"
     },
     ai: {
-      generateBtn: "🎙️ Generar Resumen con IA",
+      generateBtn: "🎙️ Generar Resumen",
       generatingBtn: "🎙️ Generando transmisión...",
       liveBroadcast: "Transmisión en Vivo"
     },

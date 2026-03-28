@@ -54,52 +54,66 @@ export default function ScorePanel({
         </label>
       </div>
 
-      {/* 🔥 FIX: Changed to flex-row and items-end to keep everything on one horizontal line */}
+      {/* 🔥 FIX: Contenedores con min-w-0 para que se adapten al Zoom sin romperse */}
       <div className="flex flex-row items-end gap-2 w-full">
         {!isManualMath ? (
-          <>
-            <div className="flex-1">
+          <div className="flex flex-row gap-2 flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
               <label className="block text-[10px] md:text-xs text-neutral-400 mb-1 truncate">{t.score.blitzLeft}</label>
               <input
                 type="number"
-                className="w-full p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50"
+                className="w-full p-2 md:p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50 text-sm md:text-base"
                 value={blitzCards}
-                onChange={(e) => setBlitzCards(e.target.value)}
-                onKeyDown={(e) => {
-                  if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault();
-                  if (e.key === 'Enter') submitScore(); // 🔥 FIX: Enter key triggers submit
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "") { setBlitzCards(""); return; }
+                  let num = parseInt(val);
+                  if (num > 10) num = 10; // Límite estricto de 10 cartas negativas
+                  if (num < 0) num = 0;
+                  setBlitzCards(num);
                 }}
-                placeholder="0"
+                onKeyDown={(e) => {
+                  if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault();
+                  if (e.key === 'Enter') submitScore();
+                }}
+                placeholder="Max 10"
                 disabled={!!winner}
               />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <label className="block text-[10px] md:text-xs text-neutral-400 mb-1 truncate">{t.score.dutchPlayed}</label>
               <input
                 type="number"
-                className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50"
+                className="w-full p-2 md:p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50 text-sm md:text-base"
                 value={dutchCards}
-                onChange={(e) => setDutchCards(e.target.value)}
-                onKeyDown={(e) => {
-                  if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault();
-                  if (e.key === 'Enter') submitScore(); // 🔥 FIX: Enter key triggers submit
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "") { setDutchCards(""); return; }
+                  let num = parseInt(val);
+                  if (num > 40) num = 40; // Límite estricto de 40 cartas positivas (mazo completo)
+                  if (num < 0) num = 0;
+                  setDutchCards(num);
                 }}
-                placeholder="0"
+                onKeyDown={(e) => {
+                  if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault();
+                  if (e.key === 'Enter') submitScore();
+                }}
+                placeholder="Max 40"
                 disabled={!!winner}
               />
             </div>
-          </>
+          </div>
         ) : (
-          <div className="flex-1">
-            <label className="block text-[10px] md:text-xs text-neutral-400 mb-1">{t.score.totalRound}</label>
+          <div className="flex-1 min-w-0">
+            <label className="block text-[10px] md:text-xs text-neutral-400 mb-1 truncate">{t.score.totalRound}</label>
             <input
               type="number"
-              className="w-full p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50"
+              className="w-full p-2 md:p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50 text-sm md:text-base"
               value={manualScore}
               onChange={(e) => setManualScore(e.target.value)}
               onKeyDown={(e) => {
-                if (['e', 'E', '+', '.'].includes(e.key)) e.preventDefault();
-                if (e.key === 'Enter') submitScore(); // 🔥 FIX: Enter key triggers submit
+                if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault();
+                if (e.key === 'Enter') submitScore();
               }}
               placeholder="e.g. 14 or -4"
               disabled={!!winner}
@@ -107,14 +121,23 @@ export default function ScorePanel({
           </div>
         )}
 
-        {/* 🔥 FIX: Button is now a fixed width on the right side */}
-        <div className="shrink-0 w-24 md:w-32">
+        {/* BOTONES ADAPTATIVOS (El Undo solo aparece si hay puntaje que revertir) */}
+        <div className="shrink-0 flex items-center gap-1 md:gap-2">
+          {lastSubmittedScore !== null && !winner && (
+            <button
+              className="p-2 md:p-3 min-h-[44px] rounded-lg font-bold transition shadow-lg bg-neutral-800 hover:bg-red-900/50 text-neutral-400 hover:text-red-400 border border-neutral-700 text-xs flex items-center justify-center"
+              onClick={undoScore}
+              title="Undo last score"
+            >
+              ⏪
+            </button>
+          )}
           {winner ? (
-            <button className="w-full p-3 h-[50px] rounded-lg font-bold transition shadow-lg bg-[#005ba1] hover:bg-blue-500 text-white text-xs md:text-sm" onClick={restartGame}>
+            <button className="p-2 md:p-3 min-h-[44px] px-3 md:px-6 rounded-lg font-bold transition shadow-lg bg-[#005ba1] hover:bg-blue-500 text-white text-xs md:text-sm" onClick={restartGame}>
               {t.score.rematchBtn}
             </button>
           ) : (
-            <button className="w-full p-3 h-[50px] rounded-lg font-bold transition shadow-lg bg-[#4ade80] hover:bg-green-400 text-black text-xs md:text-sm" onClick={submitScore} disabled={!!winner}>
+            <button className="p-2 md:p-3 min-h-[44px] px-3 md:px-6 rounded-lg font-bold transition shadow-lg bg-[#4ade80] hover:bg-green-400 text-black text-xs md:text-sm" onClick={submitScore} disabled={!!winner}>
               {t.score.submitBtn}
             </button>
           )}

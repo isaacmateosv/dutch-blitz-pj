@@ -37,6 +37,7 @@ export function useGameEngine(
     const [blitzCards, setBlitzCards] = useState("");
     const [dutchCards, setDutchCards] = useState("");
     const [recap, setRecap] = useState("");
+    const [lastSubmittedScore, setLastSubmittedScore] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [onlineCount, setOnlineCount] = useState(1);
     const [messages, setMessages] = useState([]);
@@ -138,19 +139,34 @@ export function useGameEngine(
         };
     }, [isInRoom]);
 
-    const playPopSound = () => {
+    // 🔥 PARTY PATCH: Dynamic Audio (Happy Chime vs Sad Buzzer)
+    const playSound = (score) => {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
             gain.connect(ctx.destination);
-            osc.frequency.setValueAtTime(800, ctx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
-            gain.gain.setValueAtTime(0.1, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-            osc.start(ctx.currentTime);
-            osc.stop(ctx.currentTime + 0.1);
+
+            if (score >= 0) {
+                // Happy Chime (Upward sweep)
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(600, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.1);
+            } else {
+                // Sad Buzzer (Low, harsh sawtooth)
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(200, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.3);
+            }
         } catch (e) { console.log("Audio not supported"); }
     };
 
@@ -243,8 +259,8 @@ export function useGameEngine(
                     const newTotal = currentScore + data.roundScore;
 
                     if (!data.isSilent) {
-                        playPopSound();
-                        appendMsg(`${data.username} scored ${data.roundScore} points! | ${data.isManual ? '(Manual Math)' : `(Dutch: ${data.dutch}, Blitz: ${data.blitz})`}`);
+                        playSound(data.roundScore);
+                        appendMsg(`${data.username} scored ${data.roundScore} points! | ${data.isManual ? '(Mental Math)' : `(Dutch: ${data.dutch}, Blitz: ${data.blitz})`}`);
                     }
 
                     setPlayerScores(prev => ({ ...prev, [data.username]: newTotal }));
@@ -264,9 +280,36 @@ export function useGameEngine(
                         });
                     }
                 }
+                else if (data.type === "undo_score") {
+                    const currentScore = playerScoresRef.current[data.username] || 0;
+                    const newTotal = currentScore - data.undoneScore;
+
+                    appendMsg(`⏪ ${data.username} undid their last score (${data.undoneScore} pts)`);
+                    setPlayerScores(prev => ({ ...prev, [data.username]: newTotal }));
+
+                    // 🔥 Si el jugador había ganado con ese puntaje, le revocamos la victoria
+                    if (winnerRef.current === data.username && newTotal < targetScoreRef.current) {
+                        setWinner(null);
+                        winnerDeclared.current = false;
+                        appendMsg(`⚠️ The win has been revoked! Game continues.`);
+                    }
+                }
                 else if (data.type === "ai_recap_broadcast") {
                     setIsGenerating(false);
                     setRecap(data.message);
+
+                    // 🔥 PARTY PATCH: Make the browser read the roast out loud!
+                    try {
+                        // Cancel any currently playing speech so it doesn't overlap
+                        window.speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance(data.message);
+                        utterance.lang = 'es-MX'; // Forces a Latam Spanish accent
+                        utterance.rate = 1.1;     // Slightly faster/more energetic
+                        utterance.pitch = 1.2;
+                        window.speechSynthesis.speak(utterance);
+                    } catch (err) {
+                        console.log("Speech synthesis not supported", err);
+                    }
                 }
             } catch (e) { appendMsg(event.data); }
         };
@@ -403,7 +446,18 @@ export function useGameEngine(
         let roundScore = isManualMath ? parseInt(manualScore) || 0 : (parseInt(dutchCards) || 0) * 1 - (parseInt(blitzCards) || 0) * 2;
         if (ws.current && ws.current.readyState === WebSocket.OPEN && !winner) {
             ws.current.send(JSON.stringify({ type: "score", username: username, roundScore: roundScore, isManual: isManualMath, dutch: isManualMath ? 0 : parseInt(dutchCards) || 0, blitz: isManualMath ? 0 : parseInt(blitzCards) || 0 }));
+            setLastSubmittedScore(roundScore); // 🔥 Guardamos el puntaje para poder deshacerlo
             setBlitzCards(""); setDutchCards(""); setManualScore("");
+        }
+    };
+
+    const undoScore = () => {
+        if (lastSubmittedScore === null) return;
+        setLastActivity(Date.now());
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            // Mandamos una alerta especial por el socket
+            ws.current.send(JSON.stringify({ type: "undo_score", username: username, undoneScore: lastSubmittedScore }));
+            setLastSubmittedScore(null); // 🔥 Lo regresamos a null para que solo puedan deshacer 1 vez
         }
     };
 
@@ -429,6 +483,7 @@ export function useGameEngine(
         targetScore, setTargetScore, aiEnabled, setAiEnabled,
         recap, isGenerating, onlineCount, messages,
         lastActivity,
+        lastSubmittedScore, undoScore,
         joinRoom, leaveRoom, handleStatusUpdate, kickPlayer, destroyRoom,
         broadcastNewSettings, toggleReady, generateAIRecap, restartGame, submitScore
     };
