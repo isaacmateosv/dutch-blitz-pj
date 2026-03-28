@@ -10,7 +10,9 @@ export default function ScorePanel({
   playerReady,   // <-- Recibimos props
   username,      // <-- Recibimos props
   toggleReady,   // <-- Recibimos props
-  playerScores   // <-- Recibimos props
+  playerScores,   // <-- Recibimos props
+  lastSubmittedScore, // <--- YOU FORGOT TO RECEIVE THIS
+  undoScore           // <--- AND THIS
 }) {
 
   // Lógica de validación
