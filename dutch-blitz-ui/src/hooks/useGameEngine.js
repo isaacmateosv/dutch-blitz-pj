@@ -170,6 +170,45 @@ export function useGameEngine(
         } catch (e) { console.log("Audio not supported"); }
     };
 
+    // 🔥 PARTY PATCH: Bocina de Estadio (Airhorn Synth)
+    const playPartyHorn = () => {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = ctx.currentTime;
+
+            const playBlast = (time, duration) => {
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                // Mezcla de ondas asimétricas para ese sonido sucio de "bocina"
+                osc1.type = "sawtooth";
+                osc1.frequency.value = 350;
+                osc2.type = "square";
+                osc2.frequency.value = 355;
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(ctx.destination);
+
+                gain.gain.setValueAtTime(0, time);
+                gain.gain.linearRampToValueAtTime(0.15, time + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+
+                osc1.start(time);
+                osc2.start(time);
+                osc1.stop(time + duration);
+                osc2.stop(time + duration);
+            };
+
+            // ¡Pew... Pew... Peeeeeeeew!
+            playBlast(now, 0.2);
+            playBlast(now + 0.25, 0.2);
+            playBlast(now + 0.5, 0.8);
+        } catch (e) { console.log("Audio not supported"); }
+    };
+
+
     const connectWebSocket = (currentRoom = roomCode, currentUser = username) => {
         const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
         const socket = new WebSocket(`${wsUrl}/ws/${currentRoom}/${currentUser}`);
@@ -298,18 +337,8 @@ export function useGameEngine(
                     setIsGenerating(false);
                     setRecap(data.message);
 
-                    // 🔥 PARTY PATCH: Make the browser read the roast out loud!
-                    try {
-                        // Cancel any currently playing speech so it doesn't overlap
-                        window.speechSynthesis.cancel();
-                        const utterance = new SpeechSynthesisUtterance(data.message);
-                        utterance.lang = 'es-MX'; // Forces a Latam Spanish accent
-                        utterance.rate = 1.1;     // Slightly faster/more energetic
-                        utterance.pitch = 1.2;
-                        window.speechSynthesis.speak(utterance);
-                    } catch (err) {
-                        console.log("Speech synthesis not supported", err);
-                    }
+                    // 🔥 PARTY PATCH: Reproducir Bocina de Estadio
+                    playPartyHorn();
                 }
             } catch (e) { appendMsg(event.data); }
         };
