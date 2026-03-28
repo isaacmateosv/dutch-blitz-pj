@@ -107,6 +107,37 @@ export function useGameEngine(
         }
     }, []);
 
+    // 💡 PARTY PATCH: Mantener la pantalla encendida mientras estén en la sala
+    useEffect(() => {
+        let wakeLock = null;
+        const requestWakeLock = async () => {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.log("Wake Lock error:", err.message);
+            }
+        };
+
+        if (isInRoom) {
+            requestWakeLock();
+        }
+
+        // Si el usuario cambia de app para responder un mensaje y vuelve, reconectamos el Wake Lock
+        const handleVisibilityChange = () => {
+            if (wakeLock !== null && document.visibilityState === 'visible' && isInRoom) {
+                requestWakeLock();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            if (wakeLock !== null) wakeLock.release();
+        };
+    }, [isInRoom]);
+
     const playPopSound = () => {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
