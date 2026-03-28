@@ -23,7 +23,7 @@ export default function GameHeader({
                 <h2
                     onClick={() => {
                         if (navigator.share) {
-                            navigator.share({ title: 'Dutch Blitz', text: `Join my room: ${roomCode}` });
+                            navigator.share({ title: 'Dutch Blitz PJ', text: `Join my room: "${roomCode}"` });
                         } else {
                             navigator.clipboard.writeText(roomCode);
                             alert("Code copied!");
