@@ -76,7 +76,7 @@ export default function Home() {
     const timer = setTimeout(() => {
       engine.leaveRoom();
       setInactivityAlert("timeout");
-    }, 15 * 60 * 1000);
+    }, 25 * 60 * 1000);
     return () => clearTimeout(timer);
   }, [engine.lastActivity, isInRoom, engine]);
 
@@ -92,6 +92,9 @@ export default function Home() {
       />
     );
   }
+
+  // 🔥 NUEVO: Chequeamos si al menos un jugador tiene un puntaje diferente de 0
+  const hasScores = Object.values(engine.playerScores).some(score => score !== 0);
 
   return (
     <div className="min-h-screen bg-neutral-950 p-4 md:p-8 text-white flex justify-center relative">
@@ -142,7 +145,11 @@ export default function Home() {
           undoScore={engine.undoScore}
         />
 
-        <AiRecap t={t} aiEnabled={engine.aiEnabled} isGenerating={engine.isGenerating} generateAIRecap={engine.generateAIRecap} recap={engine.recap} />
+        {/* 🔥 NUEVO: Ocultamos el AI Recap si no hay puntajes */}
+        {hasScores && (
+          <AiRecap t={t} aiEnabled={engine.aiEnabled} isGenerating={engine.isGenerating} generateAIRecap={engine.generateAIRecap} recap={engine.recap} />
+        )}
+
         <MatchHistory t={t} history={matchHistory} getUserColor={getUserColor} />
       </div>
     </div>

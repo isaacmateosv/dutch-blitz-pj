@@ -64,6 +64,7 @@ export default function ScorePanel({
               <label className="block text-[10px] md:text-xs text-neutral-400 mb-1 truncate">{t.score.blitzLeft}</label>
               <input
                 type="number"
+                min="0"
                 className="w-full p-2 md:p-3 bg-neutral-950 rounded-lg border border-red-900/50 focus:border-red-500 text-red-400 font-bold disabled:opacity-50 text-sm md:text-base"
                 value={blitzCards}
                 onChange={(e) => {
