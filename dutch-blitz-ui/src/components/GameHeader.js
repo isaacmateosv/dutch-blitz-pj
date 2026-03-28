@@ -19,8 +19,20 @@ export default function GameHeader({
             </button>
 
             <div className="flex flex-col items-center">
-                <h2 className="text-xl md:text-2xl font-black tracking-wider uppercase text-white">
-                    {t.header.room} <span className="text-[#fbd304]">{roomCode}</span>
+                {/* 1-TAP SHARE BUTTON */}
+                <h2
+                    onClick={() => {
+                        if (navigator.share) {
+                            navigator.share({ title: 'Dutch Blitz', text: `Join my room: ${roomCode}` });
+                        } else {
+                            navigator.clipboard.writeText(roomCode);
+                            alert("Code copied!");
+                        }
+                    }}
+                    className="text-xl md:text-2xl font-black tracking-wider uppercase text-white cursor-pointer hover:scale-105 transition active:scale-95 flex items-center gap-2"
+                    title="Click to share room code"
+                >
+                    {t.header.room} <span className="text-[#fbd304]">{roomCode}</span> <span className="text-sm opacity-50">🔗</span>
                 </h2>
                 <div className="flex items-center gap-2 mt-1 opacity-80">
                     <p className="text-[10px] md:text-xs text-neutral-400 font-medium tracking-wide">
