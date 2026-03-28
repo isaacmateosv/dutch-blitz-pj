@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import declarative_base, relationship
+from datetime import datetime, timezone
 
 Base = declarative_base()
 
@@ -12,13 +13,25 @@ class Room(Base):
     __tablename__ = 'rooms'
     id = Column(Integer, primary_key=True, index=True)
     room_code = Column(String, unique=True, index=True)
-    status = Column(String, default="waiting") # Statuses: waiting, playing, finished
+    status = Column(String, default="waiting") # waiting, playing, finished
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Cascade: If a room is deleted, all its scores are wiped clean too.
+    scores = relationship("Score", back_populates="room", cascade="all, delete-orphan")
 
 class Score(Base):
     __tablename__ = 'scores'
     id = Column(Integer, primary_key=True, index=True)
     room_id = Column(Integer, ForeignKey('rooms.id'))
-    user_id = Column(Integer, ForeignKey('users.id'))
-    round_number = Column(Integer)
-    blitz_pile_cards = Column(Integer) # Usually 0, or remaining cards (x -2 points)
-    dutch_pile_cards = Column(Integer) # Cards played in the center (x +1 point)
+    
+    # Core Data
+    player_name = Column(String, index=True) 
+    
+    # Analytics / Stats (Defaulting to 0/1 so it doesn't break if the UI doesn't send them yet)
+    round_number = Column(Integer, default=1)
+    blitz_pile_cards = Column(Integer, default=0) 
+    dutch_pile_cards = Column(Integer, default=0) 
+    total_score = Column(Integer, default=0)
+
+    # The wire connecting this score back to the room
+    room = relationship("Room", back_populates="scores")

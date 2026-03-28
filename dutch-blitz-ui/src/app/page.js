@@ -6,6 +6,7 @@ import Lobby from "../components/Lobby";
 import ScorePanel from "../components/ScorePanel";
 import ChatBox from "../components/ChatBox";
 import AiRecap from "../components/AiRecap";
+import MatchHistory from "../components/MatchHistory"; // <--- ADD THIS
 import { dict } from "../locales/dictionary";
 
 const EMOJIS = ["👾", "🦊", "🐶", "🐱", "🐰", "🐼", "🐯", "🐸", "🦄", "👽", "👻", "🤖", "🤡", "👹", "👑", "🔥", "🐳", "🫍", "💯", "💩", "💀", "🐢", "🐺", "🦖", "🐝"];
@@ -26,6 +27,8 @@ export default function Home() {
     setLang(newLang);
     localStorage.setItem("blitzLang", newLang);
   };
+
+  const [matchHistory, setMatchHistory] = useState([]);
 
   const [rawUsername, setRawUsername] = useState("");
   const [selectedEmoji, setSelectedEmoji] = useState("👾");
@@ -79,7 +82,7 @@ export default function Home() {
     setSelectedEmoji(randomEmoji);
     const savedHistory = JSON.parse(localStorage.getItem("blitzRoomHistory") || "[]");
     setRecentRooms(savedHistory);
-    
+
     const savedLang = localStorage.getItem("blitzLang");
     if (savedLang) setLang(savedLang);
   }, []);
@@ -225,10 +228,10 @@ export default function Home() {
         }
         else if (data.type === "request_settings") {
           if (isInRoomRef.current && ws.current?.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({ 
-              type: "settings", targetScore: targetScoreRef.current, aiEnabled: aiEnabledRef.current, 
-              playerScores: playerScoresRef.current, playerStatuses: playerStatusesRef.current, 
-              playerReady: playerReadyRef.current, winner: winnerRef.current 
+            ws.current.send(JSON.stringify({
+              type: "settings", targetScore: targetScoreRef.current, aiEnabled: aiEnabledRef.current,
+              playerScores: playerScoresRef.current, playerStatuses: playerStatusesRef.current,
+              playerReady: playerReadyRef.current, winner: winnerRef.current
             }));
           }
         }
@@ -326,6 +329,8 @@ export default function Home() {
 
     setIsInRoom(true); isInRoomRef.current = true;
     connectWebSocket(codeToJoin, fullUsername);
+
+    fetchHistory(codeToJoin);
   };
 
   const leaveRoom = () => {
@@ -379,16 +384,51 @@ export default function Home() {
 
   const generateAIRecap = async () => {
     setIsGenerating(true);
+
+    const formattedScores = Object.entries(playerScores).map(([name, score]) => ({
+      player_name: name,
+      total_score: score,
+      status: playerStatuses[name] || "concentrating"
+    }));
+
+    try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
+
+      const response = await fetch(`${apiBaseUrl}/game/recap/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room_code: roomCode, scores: formattedScores })
+      });
+      fetchHistory();
+      if (response.ok) console.log("🔥 Match saved to Supabase!");
+    } catch (error) {
+      console.error("🚨 DB save failed, but game continues:", error);
+    }
+
+    // El Show debe continuar: Disparamos la IA por WebSocket
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      const formattedScores = Object.entries(playerScores).map(([name, score]) => ({ player_name: name, total_score: score, status: playerStatuses[name] || "concentrating" }));
       ws.current.send(JSON.stringify({ type: "request_ai_recap", scores: formattedScores }));
     } else {
-      setRecap("Error: No estás conectado a la sala."); setIsGenerating(false);
+      setRecap("Error: No estás conectado a la sala.");
+      setIsGenerating(false);
     }
   };
 
   const restartGame = () => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify({ type: "restart_game", username: username }));
+  };
+
+  const fetchHistory = async (code = roomCode) => {
+    try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
+      const response = await fetch(`${apiBaseUrl}/rooms/${code}/history/`);
+      if (response.ok) {
+        const data = await response.json();
+        setMatchHistory(data);
+      }
+    } catch (error) {
+      console.error("Failed to load history:", error);
+    }
   };
 
   const submitScore = () => {
@@ -410,13 +450,24 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-neutral-950 p-4 md:p-8 text-white flex justify-center relative">
 
-      {/* TOAST NOTIFICATIONS */}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-        {toasts.map(t => (
-          <div key={t.id} className="bg-neutral-800/90 backdrop-blur-sm text-neutral-300 text-xs md:text-sm px-4 py-2 rounded-xl shadow-2xl border border-neutral-700/50 transition-all duration-300">
-            {t.msg}
-          </div>
-        ))}
+      {/* TOAST NOTIFICATIONS (Movidos al centro, diseño de píldora y con negritas) */}
+      <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center gap-2 pointer-events-none w-full max-w-sm px-4">
+        {toasts.map(t => {
+          // Cortamos el mensaje para separar el nombre de la acción
+          const parts = t.msg.split(/( joined the lobby\.| left the lobby\.)/);
+          return (
+            <div key={t.id} className="bg-neutral-800/95 backdrop-blur-md text-neutral-300 text-[11px] md:text-xs px-5 py-2 rounded-full shadow-2xl border border-neutral-700/80 transition-all duration-300 flex items-center gap-1.5 text-center">
+              {parts.length > 1 ? (
+                <>
+                  <span className="font-bold text-white">{parts[0]}</span>
+                  <span>{parts[1]}</span>
+                </>
+              ) : (
+                t.msg
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="w-full max-w-2xl flex flex-col gap-4">
@@ -468,23 +519,25 @@ export default function Home() {
           </div>
         </div>
 
-        {/* LEADERBOARD */}
-        <div className="flex gap-4 flex-wrap mt-2 md:mt-4 justify-center md:justify-end w-full md:w-auto">
+        {/* LEADERBOARD (Optimizado para 8 jugadores) */}
+        <div className="flex gap-2 md:gap-3 flex-wrap mt-2 md:mt-4 justify-center md:justify-end w-full md:w-auto">
           {Object.entries(playerScores).map(([name, score]) => {
             const isMe = name === username;
             return (
-              <div key={name} className={`relative flex flex-col items-center ${isMe ? 'scale-105' : 'opacity-90'}`}>
+              <div key={name} className={`relative flex flex-col items-center ${isMe ? 'scale-105 z-10' : 'opacity-90'}`}>
                 {playerStatuses[name] && (
-                  <div className="absolute bottom-full mb-1 w-max max-w-[140px] z-10">
-                    <div className="text-[11px] text-neutral-800 bg-neutral-200 px-3 py-1.5 rounded-xl text-center break-words leading-tight shadow-md border border-neutral-400 font-medium">
+                  // z-20 asegura que la nube de pensamiento siempre flote por encima de las píldoras de la fila de arriba
+                  <div className="absolute bottom-full mb-1 w-max max-w-[130px] z-20 pointer-events-none">
+                    <div className="text-[10px] text-neutral-800 bg-neutral-200 px-2.5 py-1.5 rounded-xl text-center break-words leading-tight shadow-lg border border-neutral-400 font-bold">
                       {playerStatuses[name]}
                     </div>
                     <div className="w-2 h-2 bg-neutral-200 rotate-45 border-r border-b border-neutral-400 absolute -bottom-1 left-1/2 transform -translate-x-1/2"></div>
                   </div>
                 )}
-                <span className={`px-4 py-1.5 text-sm font-bold border shadow-md flex items-center gap-1 rounded-full ${isMe ? 'bg-neutral-800 border-neutral-400 ring-2 ring-neutral-400' : 'bg-neutral-900 border-neutral-700'}`}>
+                {/* Píldoras más compactas (px-3 py-1 y text-xs) para que quepan 8 jugadores sin colapsar la pantalla */}
+                <span className={`px-3 py-1 md:px-4 md:py-1.5 text-xs md:text-sm font-bold border shadow-sm flex items-center gap-1 rounded-full ${isMe ? 'bg-neutral-800 border-neutral-400 ring-1 ring-neutral-400' : 'bg-neutral-900 border-neutral-700'}`}>
                   <span className={getUserColor(name)}>
-                    {name} {isMe && <span className="text-[10px] text-[#fbd304] font-bold ml-1 tracking-widest uppercase">{t.header.you}</span>}
+                    {name} {isMe && <span className="text-[9px] text-[#fbd304] font-black ml-1 tracking-widest uppercase">{t.header.you}</span>}
                   </span>: <span className={score >= 0 ? "text-white" : "text-red-400"}>{score}</span>
                 </span>
               </div>
@@ -502,7 +555,7 @@ export default function Home() {
 
         <ChatBox messages={messages} playerScores={playerScores} getUserColor={getUserColor} />
 
-        <ScorePanel 
+        <ScorePanel
           t={t} isManualMath={isManualMath} setIsManualMath={setIsManualMath}
           manualScore={manualScore} setManualScore={setManualScore}
           blitzCards={blitzCards} setBlitzCards={setBlitzCards} dutchCards={dutchCards} setDutchCards={setDutchCards}
@@ -511,7 +564,9 @@ export default function Home() {
         />
 
         <AiRecap t={t} aiEnabled={aiEnabled} isGenerating={isGenerating} generateAIRecap={generateAIRecap} recap={recap} />
+        <MatchHistory t={t} history={matchHistory} getUserColor={getUserColor} />
       </div>
+
     </div>
   );
 }

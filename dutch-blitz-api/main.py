@@ -20,7 +20,11 @@ client = AsyncOpenAI(
 class ScoreData(BaseModel):
     player_name: str
     total_score: int
-    status: str = "concentrating" # Añadido soporte explícito para el estado
+    status: str = "concentrating" 
+    # Optional fields for future analytics!
+    round_number: int = 1
+    blitz_pile_cards: int = 0
+    dutch_pile_cards: int = 0
 
 class MatchRecapRequest(BaseModel):
     room_code: str
@@ -30,10 +34,12 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+# main.py
+# main.py
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
+    allow_origins=["*"], # For local dev; replace with actual domain in production
+    allow_credentials=False, # Must be False when using "*"
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -70,6 +76,58 @@ def create_room(room: RoomCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_room)
     return db_room
+
+# main.py
+@app.post("/game/recap/")
+def save_game_recap(recap: MatchRecapRequest, db: Session = Depends(get_db)):
+    # 1. Find or create the Room
+    db_room = db.query(models.Room).filter(models.Room.room_code == recap.room_code).first()
+    if not db_room:
+        db_room = models.Room(room_code=recap.room_code, status="finished")
+        db.add(db_room)
+        db.commit()
+        db.refresh(db_room)
+    else:
+        db_room.status = "finished"
+
+    # 2. Process each player's score
+    for stat in recap.scores:
+        # 3. Find or create the User
+        user = db.query(models.User).filter(models.User.username == stat.player_name).first()
+        if not user:
+            user = models.User(username=stat.player_name)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # 4. Create the Score entry tied to both
+        new_score = models.Score(
+            room_id=db_room.id,
+            player_name=stat.player_name,
+            total_score=stat.total_score,
+            round_number=stat.round_number,
+            blitz_pile_cards=stat.blitz_pile_cards,
+            dutch_pile_cards=stat.dutch_pile_cards
+        )
+        db.add(new_score)
+
+    db.commit()
+    return {"status": "success", "message": "Match results archived!"}
+
+@app.get("/rooms/{room_code}/history/")
+def get_room_history(room_code: str, db: Session = Depends(get_db)):
+    # Find the room first
+    db_room = db.query(models.Room).filter(models.Room.room_code == room_code).first()
+    if not db_room:
+        return []
+
+    # Get all scores for this room, ordered by the most recent ones
+    # We use .desc() so the latest games appear at the top
+    history = db.query(models.Score).filter(
+        models.Score.room_id == db_room.id
+    ).order_by(models.Score.id.desc()).all()
+    
+    return history
 
 @app.websocket("/ws/{room_code}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str):
