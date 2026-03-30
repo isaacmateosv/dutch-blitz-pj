@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import models
 import os
-from database import engine, SessionLocal
+from database import engine, SessionLocal, get_db
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
@@ -49,13 +49,6 @@ class UserCreate(BaseModel):
 
 class RoomCreate(BaseModel):
     room_code: str
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @app.post("/users/")
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
@@ -140,10 +133,33 @@ def get_room_history(room_code: str, db: Session = Depends(get_db)):
     
     return history
 
+# 1. NEW SIGNATURE: We added 'email' and 'db' here
 @app.websocket("/ws/{room_code}/{username}")
-async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str):
+async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str, email: str = None, db: Session = Depends(get_db)):
     await manager.connect(websocket, room_code)
     
+    # --- 🔥 NEW: AUTHENTICATION WALL LOGIC ---
+    try:
+        db_room = db.query(models.Room).filter(models.Room.room_code == room_code).first()
+        if not db_room:
+            # First person in the room creates it. If they have an email, it's permanent.
+            db_room = models.Room(
+                room_code=room_code, 
+                target_score=75,
+                is_permanent=bool(email), 
+                created_by=email
+            )
+            db.add(db_room)
+            db.commit()
+        elif email and not db_room.is_permanent:
+            # If a guest created it, but a Registered User joins later, upgrade the room!
+            db_room.is_permanent = True
+            db_room.created_by = email
+            db.commit()
+    except Exception as e:
+        print(f"Database error during room creation: {e}")
+    # -----------------------------------------
+
     player_count = len(manager.active_connections[room_code])
     join_message = {
         "type": "system",

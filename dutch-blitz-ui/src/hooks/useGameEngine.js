@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "../contexts/ToastContext";
 import confetti from "canvas-confetti";
+import { supabase } from "../lib/supabase";
 
 export function useGameEngine(
     username, setUsername,
@@ -17,6 +18,7 @@ export function useGameEngine(
 
     // ✅ FIXED: Moved missing states and refs from page.js into the Engine
     const [targetScore, setTargetScore] = useState(75);
+    const [authUser, setAuthUser] = useState(null); // Tracks if they are logged in
     const targetScoreRef = useRef(75);
     const [aiEnabled, setAiEnabled] = useState(true);
     const aiEnabledRef = useRef(true);
@@ -107,6 +109,24 @@ export function useGameEngine(
             connectWebSocket(savedRoom, savedUser);
         }
     }, []);
+
+    // 🔥 NEW: Check for an active Supabase session on load
+    useEffect(() => {
+        const checkUser = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setAuthUser(session?.user || null);
+        };
+
+        checkUser();
+
+        // Listen for login/logout events
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setAuthUser(session?.user || null);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
 
     // 💡 PARTY PATCH: Mantener la pantalla encendida mientras estén en la sala
     useEffect(() => {
@@ -211,7 +231,11 @@ export function useGameEngine(
 
     const connectWebSocket = (currentRoom = roomCode, currentUser = username) => {
         const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
-        const socket = new WebSocket(`${wsUrl}/ws/${currentRoom}/${currentUser}`);
+
+        // NEW: Check if authUser exists and append it as a query parameter
+        const emailQuery = authUser?.email ? `?email=${encodeURIComponent(authUser.email)}` : "";
+        const socket = new WebSocket(`${wsUrl}/ws/${currentRoom}/${currentUser}${emailQuery}`);
+
         let pingInterval;
 
         const appendMsg = (text, isTemporary = false) => {
@@ -514,6 +538,7 @@ export function useGameEngine(
         lastActivity,
         lastSubmittedScore, undoScore,
         joinRoom, leaveRoom, handleStatusUpdate, kickPlayer, destroyRoom,
-        broadcastNewSettings, toggleReady, generateAIRecap, restartGame, submitScore
+        broadcastNewSettings, toggleReady, generateAIRecap, restartGame, submitScore,
+        authUser
     };
 }

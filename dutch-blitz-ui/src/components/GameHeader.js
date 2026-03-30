@@ -7,7 +7,8 @@ export default function GameHeader({
     toggleLang,
     setShowSettings,
     showSettings,
-    leaveRoom
+    leaveRoom,
+    authUser
 }) {
     return (
         <div className="flex justify-between items-start w-full">
@@ -19,6 +20,18 @@ export default function GameHeader({
             </button>
 
             <div className="flex flex-col items-center">
+                {/* THE DYNAMIC AUTH BADGE */}
+                <div className="mb-1 flex justify-center">
+                    {authUser ? (
+                        <span className="text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-widest bg-emerald-900/30 text-emerald-400 border-emerald-800">
+                            ✓ Registered
+                        </span>
+                    ) : (
+                        <span className="text-[9px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-widest bg-neutral-800 text-neutral-400 border-neutral-700">
+                            👤 Guest
+                        </span>
+                    )}
+                </div>
                 {/* 1-TAP SHARE BUTTON */}
                 <h2
                     onClick={() => {

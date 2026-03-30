@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime, timezone
 
@@ -15,6 +15,10 @@ class Room(Base):
     room_code = Column(String, unique=True, index=True)
     status = Column(String, default="waiting") # waiting, playing, finished
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # 🔥 NEW: Authentication Wall Logic
+    is_permanent = Column(Boolean, default=False)
+    created_by = Column(String, nullable=True) 
 
     # Cascade: If a room is deleted, all its scores are wiped clean too.
     scores = relationship("Score", back_populates="room", cascade="all, delete-orphan")

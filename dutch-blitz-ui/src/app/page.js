@@ -70,6 +70,9 @@ export default function Home() {
     15 * 60 * 1000
   );
 
+  // Grab the auth state from the engine
+  const authUser = engine.authUser;
+
   // ⏳ Timeout Watcher
   useEffect(() => {
     if (!isInRoom) return;
@@ -89,6 +92,7 @@ export default function Home() {
         joinRoom={(code) => engine.joinRoom(rawUsername, selectedEmoji, code)}
         targetScore={engine.targetScore} setTargetScore={engine.setTargetScore}
         inactivityAlert={inactivityAlert}
+        authUser={authUser}
       />
     );
   }
@@ -105,6 +109,7 @@ export default function Home() {
             t={t} roomCode={roomCode} targetScore={engine.targetScore} onlineCount={engine.onlineCount}
             lang={lang} toggleLang={toggleLang} setShowSettings={setShowSettings} showSettings={showSettings}
             leaveRoom={engine.leaveRoom}
+            authUser={authUser}
           />
 
           <div className="flex items-center bg-neutral-900 border border-neutral-700 rounded-full px-3 py-1.5 shadow-inner w-full mt-2">
