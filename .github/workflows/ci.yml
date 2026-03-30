@@ -1,15 +1,16 @@
 name: BlitzRoom CI
 
-# This tells GitHub to run this script every time you push to the main branch
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "main", "master" ]
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest # Spins up a secure Linux server
+    runs-on: ubuntu-latest 
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
     - name: 📥 Checkout Code
@@ -19,7 +20,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.13"
-        cache: 'pip' # Speeds up future runs
+        cache: 'pip'
 
     - name: 📦 Install Backend Dependencies
       run: |
@@ -30,6 +31,4 @@ jobs:
     - name: 🕵️‍♂️ Security & Syntax Check
       run: |
         cd dutch-blitz-api
-        # This compiles the python files to check for fatal syntax errors 
-        # without actually running the server.
         python -m py_compile main.py models.py database.py
