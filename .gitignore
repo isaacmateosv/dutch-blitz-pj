@@ -30,6 +30,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Un-ignore my frontend lib folder!
+!dutch-blitz-ui/src/lib/
 lib64/
 parts/
 sdist/

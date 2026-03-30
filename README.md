@@ -11,6 +11,7 @@ This project was engineered to handle live state synchronization across multiple
 * **AI Match Commentator:** Integrates the OpenAI API to analyze final game statistics (JSON payloads) and dynamically generate a customized, humorous esports-style match recap.
 * **PostgreSQL Integration:** Robust relational database architecture managed via SQLAlchemy ORM, utilizing connection pooling (Supavisor) for reliable cloud performance.
 * **Mobile-First Gaming UI:** A sleek, responsive, dark-mode interface built with Tailwind CSS, featuring forced lowercase inputs, real-time online player counters, and dynamic scoring toggles (Manual vs. Auto-math).
+* **Telegram Bot Integration:** A secure, admin-only Telegram bot interface for generating and managing permanent, secure room codes.
 
 ## 🛠 Tech Stack
 
