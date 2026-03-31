@@ -40,8 +40,8 @@ export const dict = {
     },
     ai: {
       generateBtn: "🎙️ Generate Match Recap",
-      generatingBtn: "🎙️ Generating studio broadcast...",
-      liveBroadcast: "Live Studio Broadcast"
+      generatingBtn: "🎙️ Generating Broadcast...",
+      liveBroadcast: "Live Broadcast"
     },
     ready: {
       waiting: "Waiting for players to be ready...",
@@ -49,6 +49,9 @@ export const dict = {
       cancel: "Cancel Ready",
       isReadyMsg: "is ready!",
       notReadyMsg: "is not ready."
+    },
+    system: {
+      contacting: "Contacting the studio...",
     }
   },
   es: {
@@ -91,8 +94,8 @@ export const dict = {
     },
     ai: {
       generateBtn: "🎙️ Generar Resumen",
-      generatingBtn: "🎙️ Generando transmisión...",
-      liveBroadcast: "Transmisión en Vivo"
+      generatingBtn: "🎙️ Generando Transmisión...",
+      liveBroadcast: "Transmisión En Vivo"
     },
     ready: {
       waiting: "Esperando a los jugadores...",
@@ -100,6 +103,9 @@ export const dict = {
       cancel: "No estoy listo",
       isReadyMsg: "está listo!",
       notReadyMsg: "ya no está listo."
+    },
+    system: {
+      contacting: "Contactando con el estudio...",
     }
   }
 };

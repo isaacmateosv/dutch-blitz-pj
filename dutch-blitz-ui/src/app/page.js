@@ -115,12 +115,34 @@ export default function Home() {
           <div className="flex items-center bg-neutral-900 border border-neutral-700 rounded-full px-3 py-1.5 shadow-inner w-full mt-2">
             <span className="text-sm mr-2 opacity-70">💭</span>
             <input
-              type="text" maxLength={40} placeholder={t.header.thoughtPlaceholder}
-              className="bg-transparent text-sm focus:outline-none flex-grow text-purple-200 placeholder-neutral-600 w-full"
+              type="text" maxLength={40}
+              // 🔥 Si hay sugerencia de IA, la mostramos como placeholder
+              placeholder={engine.suggestedThought || t.header.thoughtPlaceholder}
+              className="bg-transparent text-sm focus:outline-none flex-grow text-purple-200 placeholder-purple-400/50 w-full"
               value={myThought} onChange={(e) => setMyThought(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') engine.handleStatusUpdate(myThought); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  // Si no escribió nada, enviamos la sugerencia de la IA
+                  const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
+                  if (textToSend) {
+                    engine.handleStatusUpdate(textToSend);
+                    setMyThought("");
+                    engine.setSuggestedThought(""); // Limpiamos la sugerencia tras usarla
+                  }
+                }
+              }}
             />
-            <button onClick={() => engine.handleStatusUpdate(myThought)} className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-4 py-2 rounded-full font-bold transition ml-2 tracking-wide shadow-md">
+            <button
+              onClick={() => {
+                const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
+                if (textToSend) {
+                  engine.handleStatusUpdate(textToSend);
+                  setMyThought("");
+                  engine.setSuggestedThought("");
+                }
+              }}
+              className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-4 py-2 rounded-full font-bold transition ml-2 tracking-wide shadow-md"
+            >
               {t.header.setBtn}
             </button>
           </div>
@@ -142,7 +164,7 @@ export default function Home() {
 
         <ScorePanel
           t={t} isManualMath={engine.isManualMath} setIsManualMath={engine.setIsManualMath}
-          manualScore={engine.manualScore} setManualScore={engine.setManualScore}
+          mentalScore={engine.mentalScore} setMentalScore={engine.setMentalScore}
           blitzCards={engine.blitzCards} setBlitzCards={engine.setBlitzCards} dutchCards={engine.dutchCards} setDutchCards={engine.setDutchCards}
           winner={engine.winner} restartGame={engine.restartGame} submitScore={engine.submitScore}
           playerReady={engine.playerReady} username={username} toggleReady={() => engine.toggleReady(t.ready.isReadyMsg, t.ready.notReadyMsg)} playerScores={engine.playerScores}

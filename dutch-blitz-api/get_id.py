@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(current_dir, '.env')
+env_path = os.path.join(current_dir, '.env.local')
 load_dotenv(env_path)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

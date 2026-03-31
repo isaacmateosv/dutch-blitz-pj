@@ -11,14 +11,17 @@ export function useGameEngine(
     setMyThought,
     recentRooms, setRecentRooms,
     fetchHistory, setInactivityAlert,
-    INACTIVITY_LIMIT = 15 * 60 * 1000
+    INACTIVITY_LIMIT = 15 * 60 * 1000,
+    t
 ) {
     const { showToast } = useToast();
     const ws = useRef(null);
 
-    // ✅ FIXED: Moved missing states and refs from page.js into the Engine
     const [targetScore, setTargetScore] = useState(75);
-    const [authUser, setAuthUser] = useState(null); // Tracks if they are logged in
+    const [authUser, setAuthUser] = useState(null);
+
+    const [suggestedThought, setSuggestedThought] = useState("");
+
     const targetScoreRef = useRef(75);
     const [aiEnabled, setAiEnabled] = useState(true);
     const aiEnabledRef = useRef(true);
@@ -35,7 +38,7 @@ export function useGameEngine(
     const winnerDeclared = useRef(false);
 
     const [isManualMath, setIsManualMath] = useState(true);
-    const [manualScore, setManualScore] = useState("");
+    const [mentalScore, setMentalScore] = useState("");
     const [blitzCards, setBlitzCards] = useState("");
     const [dutchCards, setDutchCards] = useState("");
     const [recap, setRecap] = useState("");
@@ -85,8 +88,9 @@ export function useGameEngine(
             const savedStatuses = sessionStorage.getItem("blitzStatuses");
             if (savedStatuses) {
                 const parsedStatuses = JSON.parse(savedStatuses);
+                // 🔥 CAMBIO: Mantenemos los estados de los demás, pero el nuestro lo ponemos en espera
+                parsedStatuses[savedUser] = t?.system?.contacting || "Contactando...";;
                 setPlayerStatuses(parsedStatuses);
-                if (parsedStatuses[savedUser]) setMyThought(parsedStatuses[savedUser]);
             }
 
             const savedMessages = sessionStorage.getItem("blitzMessages");
@@ -106,7 +110,15 @@ export function useGameEngine(
 
             setIsInRoom(true);
             isInRoomRef.current = true;
+
+            // 🔥 NUEVO: Aseguramos que el input local esté vacío y listo para la sugerencia
+            setMyThought("");
+            setSuggestedThought(t?.system?.contacting || "Contactando...");
+
             connectWebSocket(savedRoom, savedUser);
+
+            // 🔥 PARCHE BUG 1: Recuperar el historial al reconectar la sesión
+            fetchHistory(savedRoom);
         }
     }, []);
 
@@ -228,6 +240,37 @@ export function useGameEngine(
         } catch (e) { console.log("Audio not supported"); }
     };
 
+    // 🔥 PARTY PATCH: Campana de Ring de Boxeo (¡Ding! ¡Ding!) para el Rematch
+    const playRoundStartSound = () => {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+            const playDing = (delay) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                // Frecuencia aguda y metálica simulando una campana
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(850, ctx.currentTime + delay);
+                // Ligera caída de tono para darle resonancia
+                osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + delay + 0.6);
+
+                // Golpe seco inicial (attack) y caída lenta (decay)
+                gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+                gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + delay + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.6);
+
+                osc.start(ctx.currentTime + delay);
+                osc.stop(ctx.currentTime + delay + 0.6);
+            };
+
+            // Tocamos la campana dos veces rápidas: ¡Ding! ¡Ding!
+            playDing(0);
+            playDing(0.15);
+        } catch (e) { console.log("Audio not supported"); }
+    };
 
     const connectWebSocket = (currentRoom = roomCode, currentUser = username) => {
         const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
@@ -266,9 +309,22 @@ export function useGameEngine(
         socket.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.type !== "pong" && data.type !== "request_settings") setLastActivity(Date.now());
 
-                if (data.type === "system") {
+                // 🔥 ARREGLO: Encerramos esto en llaves para que no secuestre los "else if"
+                if (data.type !== "pong" && data.type !== "request_settings") {
+                    setLastActivity(Date.now());
+                }
+
+                // 🔥 EMPEZAMOS CON UN 'IF' LIMPIO (sin el else)
+                if (data.type === "ai_suggestion") {
+                    if (data.username === currentUser) {
+                        setSuggestedThought(data.suggestion); // 1. Actualiza el placeholder
+
+                        // 2. Actualiza la burbuja sobre el avatar
+                        setPlayerStatuses(prev => ({ ...prev, [currentUser]: data.suggestion }));
+                    }
+                }
+                else if (data.type === "system") {
                     if (data.message.includes("joined") || data.message.includes("left")) showToast(data.message.replace('🟢 ', '').replace('🔴 ', ''));
                     else appendMsg(data.message);
                     if (data.playerCount !== undefined) setOnlineCount(data.playerCount);
@@ -315,7 +371,9 @@ export function useGameEngine(
                     setWinner(null);
                     winnerDeclared.current = false;
                     appendMsg(`🔄 ${data.username} restarted the game! All scores reset to 0.`);
-                    playPopSound();
+
+                    // 🔥 NUEVO: ¡Suena la campana para el siguiente round!
+                    playRoundStartSound();
                 }
                 else if (data.type === "score") {
                     const currentScore = playerScoresRef.current[data.username] || 0;
@@ -391,11 +449,16 @@ export function useGameEngine(
         setUsername(fullUsername);
         setRoomCode(codeToJoin);
 
-        const loadingSalute = aiEnabledRef.current ? "💭 Mmm..." : "Listo! 🃏";
-        setMyThought(loadingSalute);
+        // Dentro de joinRoom:
+        setMyThought(""); // 🔥 CRÍTICO: Debe estar vacío para que se vea el placeholder
+        setSuggestedThought(t?.system?.contacting || "Contactando..."); // Esto se verá en el input
 
         setPlayerScores(prev => ({ ...prev, [fullUsername]: prev[fullUsername] || 0 }));
-        setPlayerStatuses(prev => ({ ...prev, [fullUsername]: loadingSalute }));
+        // 🔥 CRÍTICO: Esto dibuja la burbuja flotante
+        setPlayerStatuses(prev => ({
+            ...prev,
+            [fullUsername]: t?.system?.contacting || "Contactando..."
+        }));
 
         sessionStorage.setItem("blitzUsername", fullUsername);
         sessionStorage.setItem("blitzRoomCode", codeToJoin);
@@ -408,6 +471,24 @@ export function useGameEngine(
         isInRoomRef.current = true;
         connectWebSocket(codeToJoin, fullUsername);
         fetchHistory(codeToJoin);
+
+        const fetchInitialState = async () => {
+            try {
+                const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
+                const response = await fetch(`${apiBaseUrl}/rooms/${codeToJoin}/history/`);
+                const history = await response.json();
+
+                if (history && history.length > 0) {
+                    // Imprimimos en consola para confirmar que los datos llegaron
+                    console.log("🏆 Historial de la sala recuperado:", history);
+                    // Nota: Si tienes un estado de React específico para guardar
+                    // el historial y mostrar el podio, actualízalo aquí.
+                }
+            } catch (error) {
+                console.error("Error fetching room history:", error);
+            }
+        };
+        fetchInitialState();
     };
 
     const leaveRoom = () => {
@@ -496,11 +577,11 @@ export function useGameEngine(
 
     const submitScore = () => {
         setLastActivity(Date.now());
-        let roundScore = isManualMath ? parseInt(manualScore) || 0 : (parseInt(dutchCards) || 0) * 1 - (parseInt(blitzCards) || 0) * 2;
+        let roundScore = isManualMath ? parseInt(mentalScore) || 0 : (parseInt(dutchCards) || 0) * 1 - (parseInt(blitzCards) || 0) * 2;
         if (ws.current && ws.current.readyState === WebSocket.OPEN && !winner) {
             ws.current.send(JSON.stringify({ type: "score", username: username, roundScore: roundScore, isManual: isManualMath, dutch: isManualMath ? 0 : parseInt(dutchCards) || 0, blitz: isManualMath ? 0 : parseInt(blitzCards) || 0 }));
             setLastSubmittedScore(roundScore); // 🔥 Guardamos el puntaje para poder deshacerlo
-            setBlitzCards(""); setDutchCards(""); setManualScore("");
+            setBlitzCards(""); setDutchCards(""); setMentalScore("");
         }
     };
 
@@ -531,7 +612,7 @@ export function useGameEngine(
 
     return {
         playerScores, playerStatuses, playerReady, winner,
-        isManualMath, setIsManualMath, manualScore, setManualScore,
+        isManualMath, setIsManualMath, mentalScore, setMentalScore,
         blitzCards, setBlitzCards, dutchCards, setDutchCards,
         targetScore, setTargetScore, aiEnabled, setAiEnabled,
         recap, isGenerating, onlineCount, messages,
@@ -539,6 +620,7 @@ export function useGameEngine(
         lastSubmittedScore, undoScore,
         joinRoom, leaveRoom, handleStatusUpdate, kickPlayer, destroyRoom,
         broadcastNewSettings, toggleReady, generateAIRecap, restartGame, submitScore,
+        suggestedThought, setSuggestedThought,
         authUser
     };
 }

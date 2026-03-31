@@ -1,38 +1,108 @@
+import { useState, useEffect } from "react";
+
 export default function AiRecap({ t, aiEnabled, isGenerating, generateAIRecap, recap }) {
+  // 🔥 NUEVOS ESTADOS: Manejan la imagen localmente para no ensuciar el engine
+  const [imageUrl, setImageUrl] = useState(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+
+  // 🔥 EFECTO: Si llega un nuevo resumen, limpiamos la imagen de la ronda anterior
+  useEffect(() => {
+    setImageUrl(null);
+  }, [recap]);
+
   if (!aiEnabled) return null;
 
+  // 🔥 NUEVA FUNCIÓN: Llama a tu endpoint de Hugging Face en el backend
+  const requestImage = async () => {
+    setIsGeneratingImage(true);
+    try {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
+      const response = await fetch(`${apiBaseUrl}/game/recap/image/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recap_text: recap })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setImageUrl(data.image_data); // Guardamos el Base64 recibido
+      } else {
+        alert("El servidor de arte está saturado. ¡Intenta de nuevo en unos segundos!");
+      }
+    } catch (e) {
+      console.error("Error generating image:", e);
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  // Tu lógica original de parseo de texto (manteniendo negritas y limpieza)
   const renderAIText = (text) => {
     const cleanText = text.replace(/^"|"$/g, '');
     return cleanText.split('\n').map((line, i) => {
       if (!line.trim()) return null;
       const parts = line.split('**');
       return (
-        <p key={i} className="mb-3 text-purple-100 leading-relaxed text-sm md:text-base">
+        <div key={i} className="mb-3 text-purple-100 leading-relaxed text-sm md:text-base">
           {parts.map((part, index) => index % 2 === 1 ? <strong key={index} className="text-white font-bold">{part}</strong> : part)}
-        </p>
+        </div>
       );
     });
   };
 
   return (
-    <div className="bg-neutral-900 p-1 rounded-xl bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-900 shadow-lg shadow-purple-900/20 mb-8">
-      <div className="bg-neutral-950 rounded-lg p-3 h-full w-full">
-        <button 
-          className={`p-3 rounded-lg font-bold transition-all w-full shadow-lg border border-purple-500/30 ${isGenerating ? "bg-neutral-900 animate-pulse text-purple-400" : "bg-purple-900/40 hover:bg-purple-800/60 text-purple-200"}`} 
-          onClick={generateAIRecap} 
+    <div className="bg-neutral-900 p-1 rounded-xl bg-gradient-to-r from-purple-900 via-indigo-900 to-purple-900 shadow-lg shadow-purple-900/20 mb-8 animate-fade-in">
+      <div className="bg-neutral-950 rounded-lg p-3 h-full w-full flex flex-col gap-4">
+
+        {/* Botón de Generar Resumen (Groq) */}
+        <button
+          className={`p-4 rounded-lg font-black tracking-widest uppercase transition-all w-full shadow-lg border border-purple-500/30 ${isGenerating ? "bg-neutral-900 animate-pulse text-purple-400" : "bg-purple-900/40 hover:bg-purple-800/60 text-purple-200"}`}
+          onClick={generateAIRecap}
           disabled={isGenerating}
         >
           {isGenerating ? t.ai.generatingBtn : t.ai.generateBtn}
         </button>
 
         {recap && (
-          <div className="mt-4 p-4 bg-neutral-900/50 rounded-lg border border-purple-500/20 shadow-inner">
-            <div className="flex items-center gap-2 mb-3 border-b border-purple-900/50 pb-2">
-              <span className="text-xl">📻</span>
-              <span className="font-bold text-purple-300 uppercase tracking-widest text-xs">{t.ai.liveBroadcast}</span>
+          <div className="p-4 bg-neutral-900/50 rounded-lg border border-purple-500/20 shadow-inner flex flex-col gap-4">
+
+            {/* Cabecera de Transmisión en Vivo */}
+            <div className="flex items-center justify-between border-b border-purple-900/50 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="font-black text-purple-300 uppercase tracking-widest text-[10px]">{t.ai.liveBroadcast}</span>
+              </div>
+              <span className="text-xs opacity-50 font-mono">LIVE_FEED</span>
             </div>
-            <div className="pl-2 border-l-2 border-purple-500/50">
+
+            {/* Texto del Comentarista */}
+            <div className="pl-3 border-l-2 border-purple-500/50 italic">
               {renderAIText(recap)}
+            </div>
+
+            {/* 🔥 NUEVA SECCIÓN: ZONA DE ILUSTRACIÓN */}
+            <div className="mt-2 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 min-h-[150px] flex items-center justify-center relative group">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt="AI Match Recap"
+                  className="w-full h-auto object-cover animate-fade-in hover:scale-105 transition-transform duration-700"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-3 p-6 text-center">
+                  <div className="text-4xl opacity-20 group-hover:opacity-40 transition-opacity">📺</div>
+                  <button
+                    onClick={requestImage}
+                    disabled={isGeneratingImage}
+                    className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-tighter border transition-all ${isGeneratingImage ? "bg-neutral-900 border-neutral-700 text-neutral-500" : "bg-purple-600/10 border-purple-500/50 text-purple-300 hover:bg-purple-500 hover:text-white"}`}
+                  >
+                    {isGeneratingImage ? "🖌️ Dibujando el caos..." : "🎨 Ilustrar Partida (BETA)"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

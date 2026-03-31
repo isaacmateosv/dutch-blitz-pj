@@ -1,7 +1,7 @@
 export default function ScorePanel({
   t,
   isManualMath, setIsManualMath,
-  manualScore, setManualScore,
+  mentalScore, setMentalScore,
   blitzCards, setBlitzCards,
   dutchCards, setDutchCards,
   winner,
@@ -76,7 +76,7 @@ export default function ScorePanel({
                   setBlitzCards(num);
                 }}
                 onKeyDown={(e) => {
-                  if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault();
+                  if (['e', 'E', '+', '.', '-', '&'].includes(e.key)) e.preventDefault();
                   if (e.key === 'Enter') submitScore();
                 }}
                 placeholder="Max 10"
@@ -98,7 +98,7 @@ export default function ScorePanel({
                   setDutchCards(num);
                 }}
                 onKeyDown={(e) => {
-                  if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault();
+                  if (['e', 'E', '+', '.', '-', '&'].includes(e.key)) e.preventDefault();
                   if (e.key === 'Enter') submitScore();
                 }}
                 placeholder="Max 40"
@@ -112,10 +112,18 @@ export default function ScorePanel({
             <input
               type="number"
               className="w-full p-2 md:p-3 bg-neutral-950 rounded-lg border border-emerald-900/50 focus:border-emerald-500 text-emerald-400 font-bold disabled:opacity-50 text-sm md:text-base"
-              value={manualScore}
-              onChange={(e) => setManualScore(e.target.value)}
+              value={mentalScore}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "") { setMentalScore(""); return; }
+                let num = parseInt(val);
+                if (num > 40) num = 40; // Límite estricto de 40 cartas positivas (mazo completo)
+                if (num < -20) num = -20; // Límite estricto de 20 cartas negativas (mazo completo)
+                setMentalScore(num)
+              }
+              }
               onKeyDown={(e) => {
-                if (['e', 'E', '+', '.', '-'].includes(e.key)) e.preventDefault();
+                if (['e', 'E', '+', '.', '-', '&'].includes(e.key)) e.preventDefault();
                 if (e.key === 'Enter') submitScore();
               }}
               placeholder="e.g. 14 or -4"

@@ -2,7 +2,7 @@ export default function Leaderboard({ playerScores, playerStatuses, username, ge
     if (!playerScores || Object.keys(playerScores).length === 0) return null;
 
     return (
-        <div className="flex gap-2 md:gap-3 flex-wrap mt-2 md:mt-4 justify-center md:justify-end w-full md:w-auto">
+        <div className="flex flex-wrap justify-center gap-6 p-4">
             {Object.entries(playerScores).map(([name, score]) => {
                 const isMe = name === username;
                 return (
