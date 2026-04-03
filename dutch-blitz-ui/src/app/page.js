@@ -102,54 +102,56 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-neutral-950 p-4 md:p-8 text-white flex justify-center relative">
-      <div className="w-full max-w-2xl flex flex-col gap-4">
+      <div className="w-full max-w-2xl flex flex-col gap-5">
 
-        <div className="flex flex-col border-b border-neutral-800/60 pb-5 gap-4">
+        {/* 1. HEADER (Limpio, solo información) */}
+        <div className="flex flex-col border-b border-neutral-800/60 pb-4 gap-4">
           <GameHeader
             t={t} roomCode={roomCode} targetScore={engine.targetScore} onlineCount={engine.onlineCount}
             lang={lang} toggleLang={toggleLang} setShowSettings={setShowSettings} showSettings={showSettings}
             leaveRoom={engine.leaveRoom}
             authUser={authUser}
           />
+        </div>
 
-          <div className="flex items-center bg-neutral-900 border border-neutral-700 rounded-full px-3 py-1.5 shadow-inner w-full mt-2">
-            <span className="text-sm mr-2 opacity-70">💭</span>
-            <input
-              type="text" maxLength={40}
-              // 🔥 Si hay sugerencia de IA, la mostramos como placeholder
-              placeholder={engine.suggestedThought || t.header.thoughtPlaceholder}
-              className="bg-transparent text-sm focus:outline-none flex-grow text-purple-200 placeholder-purple-400/50 w-full"
-              value={myThought} onChange={(e) => setMyThought(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  // Si no escribió nada, enviamos la sugerencia de la IA
-                  const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
-                  if (textToSend) {
-                    engine.handleStatusUpdate(textToSend);
-                    setMyThought("");
-                    engine.setSuggestedThought(""); // Limpiamos la sugerencia tras usarla
-                  }
-                }
-              }}
-            />
-            <button
-              onClick={() => {
+        {/* 2. LEADERBOARD (Los avatares y puntajes actuales) */}
+        <Leaderboard playerScores={engine.playerScores} playerStatuses={engine.playerStatuses} username={username} getUserColor={getUserColor} t={t} />
+
+        {/* 3. INPUT DE PENSAMIENTO (Anclado visualmente al Leaderboard) */}
+        <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-full px-4 py-2 shadow-inner w-full mb-2">
+          <span className="text-sm mr-3 opacity-70">💭</span>
+          <input
+            type="text" maxLength={40}
+            placeholder={engine.suggestedThought || t.header.thoughtPlaceholder}
+            className="bg-transparent text-sm focus:outline-none flex-grow text-purple-200 placeholder-purple-400/40 w-full"
+            value={myThought} onChange={(e) => setMyThought(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
                 const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
                 if (textToSend) {
                   engine.handleStatusUpdate(textToSend);
                   setMyThought("");
                   engine.setSuggestedThought("");
                 }
-              }}
-              className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-4 py-2 rounded-full font-bold transition ml-2 tracking-wide shadow-md"
-            >
-              {t.header.setBtn}
-            </button>
-          </div>
+              }
+            }}
+          />
+          <button
+            onClick={() => {
+              const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
+              if (textToSend) {
+                engine.handleStatusUpdate(textToSend);
+                setMyThought("");
+                engine.setSuggestedThought("");
+              }
+            }}
+            className="bg-purple-600/80 hover:bg-purple-500 text-purple-100 text-xs px-4 py-1.5 rounded-full font-bold transition ml-2 tracking-wide shadow-md border border-purple-500/50"
+          >
+            {t.header.setBtn}
+          </button>
         </div>
 
-        <Leaderboard playerScores={engine.playerScores} playerStatuses={engine.playerStatuses} username={username} getUserColor={getUserColor} t={t} />
-
+        {/* MODAL DE AJUSTES */}
         {showSettings && (
           <RoomSettings
             t={t} currentTargetScore={engine.targetScore} currentAiEnabled={engine.aiEnabled} winner={engine.winner}
@@ -160,8 +162,12 @@ export default function Home() {
           />
         )}
 
-        <ChatBox messages={engine.messages} playerScores={engine.playerScores} getUserColor={getUserColor} />
+        {/* 🔥 4. CHATBOX (Aparece SOLO si hay mensajes, y va ARRIBA de los controles) */}
+        {engine.messages.length > 0 && (
+          <ChatBox messages={engine.messages} playerScores={engine.playerScores} getUserColor={getUserColor} />
+        )}
 
+        {/* 🔥 5. SCORE PANEL (El "teclado" del juego, va ABAJO de los mensajes) */}
         <ScorePanel
           t={t} isManualMath={engine.isManualMath} setIsManualMath={engine.setIsManualMath}
           mentalScore={engine.mentalScore} setMentalScore={engine.setMentalScore}
@@ -172,9 +178,9 @@ export default function Home() {
           undoScore={engine.undoScore}
         />
 
-        {/* 🔥 NUEVO: Ocultamos el AI Recap si no hay puntajes */}
+        {/* 6. AI RECAP & MATCH HISTORY */}
         {hasScores && (
-          <AiRecap t={t} aiEnabled={engine.aiEnabled} isGenerating={engine.isGenerating} generateAIRecap={engine.generateAIRecap} recap={engine.recap} />
+          <AiRecap t={t} lang={lang} aiEnabled={engine.aiEnabled} isGenerating={engine.isGenerating} generateAIRecap={engine.generateAIRecap} recap={engine.recap} />
         )}
 
         <MatchHistory t={t} history={matchHistory} getUserColor={getUserColor} />

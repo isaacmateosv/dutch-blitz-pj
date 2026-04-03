@@ -2,11 +2,13 @@ import { useState } from "react";
 
 export default function RoomSettings({
     t, currentTargetScore, currentAiEnabled, winner, username, playerScores,
-    getUserColor, kickPlayer, onClose, onSave,
-    destroyRoom // <--- NUEVA PROP AQUÍ
+    getUserColor, kickPlayer, onClose, onSave, destroyRoom
 }) {
     const [draftScore, setDraftScore] = useState(currentTargetScore);
     const [draftAi, setDraftAi] = useState(currentAiEnabled);
+
+    // 🔥 LÓGICA: ¿Hay cambios sin guardar?
+    const hasChanges = draftScore !== currentTargetScore || draftAi !== currentAiEnabled;
 
     return (
         <div className="bg-neutral-900 border border-neutral-700 p-4 rounded-xl flex flex-col gap-4 shadow-lg">
@@ -18,7 +20,6 @@ export default function RoomSettings({
             </div>
 
             <div className="flex flex-col gap-3 border-b border-neutral-800 pb-4">
-
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-bold text-neutral-300">{t.settings.aiFeatures}</label>
                     <input type="checkbox" className="w-5 h-5 accent-purple-500 rounded cursor-pointer" checked={draftAi} onChange={(e) => setDraftAi(e.target.checked)} disabled={!!winner} />
@@ -38,14 +39,17 @@ export default function RoomSettings({
                     />
                 </div>
 
-                <div className="bg-amber-900/30 border border-amber-500/50 text-amber-200 p-2 rounded text-xs text-center mt-2">
-                    {t.settings.warning}
-                </div>
+                {/* 🔥 AVISO CONDICIONAL: Solo aparece si has movido algo */}
+                {hasChanges && (
+                    <div className="bg-amber-900/30 border border-amber-500/50 text-amber-200 p-2 rounded text-xs text-center mt-2 animate-fade-in">
+                        {t.settings.warning}
+                    </div>
+                )}
 
                 <button
-                    className="bg-neutral-800 hover:bg-[#4ade80] hover:text-black text-white text-sm font-bold p-2 rounded transition mt-1"
+                    className="bg-neutral-800 hover:bg-[#4ade80] hover:text-black text-white text-sm font-bold p-2 rounded transition mt-1 disabled:opacity-50"
                     onClick={() => onSave(draftScore, draftAi)}
-                    disabled={!!winner}
+                    disabled={!!winner || !hasChanges} // 🔥 También se desactiva si no hay cambios
                 >
                     {t.settings.saveBtn}
                 </button>
@@ -72,14 +76,14 @@ export default function RoomSettings({
                     )}
                 </div>
             </div>
-            {/* DANGER ZONE */}
+            {/* DANGER ZONE (Con Traducciones) */}
             <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-red-900/30">
-                <label className="text-[10px] text-red-500 uppercase tracking-widest font-black">Danger Zone</label>
+                <label className="text-[10px] text-red-500 uppercase tracking-widest font-black">{t.settings.dangerZone}</label>
                 <button
                     onClick={destroyRoom}
                     className="bg-red-950/50 hover:bg-red-600 text-red-400 hover:text-white border border-red-900/50 p-2 rounded transition text-sm font-bold flex justify-center items-center gap-2"
                 >
-                    <span>🗑️</span> Delete Room & History
+                    <span>🗑️</span> {t.settings.deleteRoom}
                 </button>
             </div>
         </div>

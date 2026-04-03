@@ -88,8 +88,7 @@ export function useGameEngine(
             const savedStatuses = sessionStorage.getItem("blitzStatuses");
             if (savedStatuses) {
                 const parsedStatuses = JSON.parse(savedStatuses);
-                // 🔥 CAMBIO: Mantenemos los estados de los demás, pero el nuestro lo ponemos en espera
-                parsedStatuses[savedUser] = t?.system?.contacting || "Contactando...";;
+                parsedStatuses[savedUser] = t?.system?.contacting || "...";;
                 setPlayerStatuses(parsedStatuses);
             }
 
@@ -111,18 +110,14 @@ export function useGameEngine(
             setIsInRoom(true);
             isInRoomRef.current = true;
 
-            // 🔥 NUEVO: Aseguramos que el input local esté vacío y listo para la sugerencia
             setMyThought("");
             setSuggestedThought(t?.system?.contacting || "Contactando...");
 
             connectWebSocket(savedRoom, savedUser);
-
-            // 🔥 PARCHE BUG 1: Recuperar el historial al reconectar la sesión
             fetchHistory(savedRoom);
         }
     }, []);
 
-    // 🔥 NEW: Check for an active Supabase session on load
     useEffect(() => {
         const checkUser = async () => {
             const { data: { session } } = await supabase.auth.getSession();
@@ -131,7 +126,6 @@ export function useGameEngine(
 
         checkUser();
 
-        // Listen for login/logout events
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setAuthUser(session?.user || null);
         });
@@ -139,8 +133,6 @@ export function useGameEngine(
         return () => subscription.unsubscribe();
     }, []);
 
-
-    // 💡 PARTY PATCH: Mantener la pantalla encendida mientras estén en la sala
     useEffect(() => {
         let wakeLock = null;
         const requestWakeLock = async () => {
@@ -157,7 +149,6 @@ export function useGameEngine(
             requestWakeLock();
         }
 
-        // Si el usuario cambia de app para responder un mensaje y vuelve, reconectamos el Wake Lock
         const handleVisibilityChange = () => {
             if (wakeLock !== null && document.visibilityState === 'visible' && isInRoom) {
                 requestWakeLock();
@@ -171,7 +162,6 @@ export function useGameEngine(
         };
     }, [isInRoom]);
 
-    // 🔥 PARTY PATCH: Dynamic Audio (Happy Chime vs Sad Buzzer)
     const playSound = (score) => {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -181,7 +171,6 @@ export function useGameEngine(
             gain.connect(ctx.destination);
 
             if (score >= 0) {
-                // Happy Chime (Upward sweep)
                 osc.type = "sine";
                 osc.frequency.setValueAtTime(600, ctx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
@@ -190,7 +179,6 @@ export function useGameEngine(
                 osc.start(ctx.currentTime);
                 osc.stop(ctx.currentTime + 0.1);
             } else {
-                // Sad Buzzer (Low, harsh sawtooth)
                 osc.type = "sawtooth";
                 osc.frequency.setValueAtTime(200, ctx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
@@ -202,7 +190,6 @@ export function useGameEngine(
         } catch (e) { console.log("Audio not supported"); }
     };
 
-    // 🔥 PARTY PATCH: Bocina de Estadio (Airhorn Synth)
     const playPartyHorn = () => {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -213,7 +200,6 @@ export function useGameEngine(
                 const osc2 = ctx.createOscillator();
                 const gain = ctx.createGain();
 
-                // Mezcla de ondas asimétricas para ese sonido sucio de "bocina"
                 osc1.type = "sawtooth";
                 osc1.frequency.value = 350;
                 osc2.type = "square";
@@ -233,14 +219,12 @@ export function useGameEngine(
                 osc2.stop(time + duration);
             };
 
-            // ¡Pew... Pew... Peeeeeeeew!
             playBlast(now, 0.2);
             playBlast(now + 0.25, 0.2);
             playBlast(now + 0.5, 0.8);
         } catch (e) { console.log("Audio not supported"); }
     };
 
-    // 🔥 PARTY PATCH: Campana de Ring de Boxeo (¡Ding! ¡Ding!) para el Rematch
     const playRoundStartSound = () => {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -251,13 +235,10 @@ export function useGameEngine(
                 osc.connect(gain);
                 gain.connect(ctx.destination);
 
-                // Frecuencia aguda y metálica simulando una campana
                 osc.type = "sine";
                 osc.frequency.setValueAtTime(850, ctx.currentTime + delay);
-                // Ligera caída de tono para darle resonancia
                 osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + delay + 0.6);
 
-                // Golpe seco inicial (attack) y caída lenta (decay)
                 gain.gain.setValueAtTime(0, ctx.currentTime + delay);
                 gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + delay + 0.02);
                 gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.6);
@@ -266,7 +247,6 @@ export function useGameEngine(
                 osc.stop(ctx.currentTime + delay + 0.6);
             };
 
-            // Tocamos la campana dos veces rápidas: ¡Ding! ¡Ding!
             playDing(0);
             playDing(0.15);
         } catch (e) { console.log("Audio not supported"); }
@@ -274,8 +254,6 @@ export function useGameEngine(
 
     const connectWebSocket = (currentRoom = roomCode, currentUser = username) => {
         const wsUrl = process.env.NEXT_PUBLIC_WS_URL || `ws://${window.location.hostname}:8000`;
-
-        // NEW: Check if authUser exists and append it as a query parameter
         const emailQuery = authUser?.email ? `?email=${encodeURIComponent(authUser.email)}` : "";
         const socket = new WebSocket(`${wsUrl}/ws/${currentRoom}/${currentUser}${emailQuery}`);
 
@@ -310,17 +288,13 @@ export function useGameEngine(
             try {
                 const data = JSON.parse(event.data);
 
-                // 🔥 ARREGLO: Encerramos esto en llaves para que no secuestre los "else if"
                 if (data.type !== "pong" && data.type !== "request_settings") {
                     setLastActivity(Date.now());
                 }
 
-                // 🔥 EMPEZAMOS CON UN 'IF' LIMPIO (sin el else)
                 if (data.type === "ai_suggestion") {
                     if (data.username === currentUser) {
-                        setSuggestedThought(data.suggestion); // 1. Actualiza el placeholder
-
-                        // 2. Actualiza la burbuja sobre el avatar
+                        setSuggestedThought(data.suggestion);
                         setPlayerStatuses(prev => ({ ...prev, [currentUser]: data.suggestion }));
                     }
                 }
@@ -371,8 +345,6 @@ export function useGameEngine(
                     setWinner(null);
                     winnerDeclared.current = false;
                     appendMsg(`🔄 ${data.username} restarted the game! All scores reset to 0.`);
-
-                    // 🔥 NUEVO: ¡Suena la campana para el siguiente round!
                     playRoundStartSound();
                 }
                 else if (data.type === "score") {
@@ -392,7 +364,6 @@ export function useGameEngine(
                         appendMsg(`🏆 ${data.username} HAS WON THE GAME WITH ${newTotal} POINTS! 🏆`);
                         if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 800]);
 
-                        // 🔥 NUEVO: EXPLOSIÓN DE CONFETI PREMIUM CON LOS COLORES DE TU APP
                         confetti({
                             particleCount: 150,
                             spread: 80,
@@ -408,7 +379,6 @@ export function useGameEngine(
                     appendMsg(`⏪ ${data.username} undid their last score (${data.undoneScore} pts)`);
                     setPlayerScores(prev => ({ ...prev, [data.username]: newTotal }));
 
-                    // 🔥 Si el jugador había ganado con ese puntaje, le revocamos la victoria
                     if (winnerRef.current === data.username && newTotal < targetScoreRef.current) {
                         setWinner(null);
                         winnerDeclared.current = false;
@@ -418,8 +388,6 @@ export function useGameEngine(
                 else if (data.type === "ai_recap_broadcast") {
                     setIsGenerating(false);
                     setRecap(data.message);
-
-                    // 🔥 PARTY PATCH: Reproducir Bocina de Estadio
                     playPartyHorn();
                 }
             } catch (e) { appendMsg(event.data); }
@@ -435,7 +403,6 @@ export function useGameEngine(
         ws.current = socket;
     };
 
-    // ✅ FIXED: Brought joinRoom and leaveRoom into the engine so they can control the socket
     const joinRoom = (rawUsername, selectedEmoji, codeToJoin = roomCode) => {
         const cleanName = rawUsername.trim().replace(/\s+/g, ' ').toLowerCase();
         if (!cleanName || !codeToJoin) return;
@@ -449,15 +416,13 @@ export function useGameEngine(
         setUsername(fullUsername);
         setRoomCode(codeToJoin);
 
-        // Dentro de joinRoom:
-        setMyThought(""); // 🔥 CRÍTICO: Debe estar vacío para que se vea el placeholder
-        setSuggestedThought(t?.system?.contacting || "Contactando..."); // Esto se verá en el input
+        setMyThought("");
+        setSuggestedThought(t?.system?.contacting || "...");
 
         setPlayerScores(prev => ({ ...prev, [fullUsername]: prev[fullUsername] || 0 }));
-        // 🔥 CRÍTICO: Esto dibuja la burbuja flotante
         setPlayerStatuses(prev => ({
             ...prev,
-            [fullUsername]: t?.system?.contacting || "Contactando..."
+            [fullUsername]: t?.system?.contacting || "..."
         }));
 
         sessionStorage.setItem("blitzUsername", fullUsername);
@@ -471,24 +436,6 @@ export function useGameEngine(
         isInRoomRef.current = true;
         connectWebSocket(codeToJoin, fullUsername);
         fetchHistory(codeToJoin);
-
-        const fetchInitialState = async () => {
-            try {
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
-                const response = await fetch(`${apiBaseUrl}/rooms/${codeToJoin}/history/`);
-                const history = await response.json();
-
-                if (history && history.length > 0) {
-                    // Imprimimos en consola para confirmar que los datos llegaron
-                    console.log("🏆 Historial de la sala recuperado:", history);
-                    // Nota: Si tienes un estado de React específico para guardar
-                    // el historial y mostrar el podio, actualízalo aquí.
-                }
-            } catch (error) {
-                console.error("Error fetching room history:", error);
-            }
-        };
-        fetchInitialState();
     };
 
     const leaveRoom = () => {
@@ -500,7 +447,6 @@ export function useGameEngine(
         setWinner(null); winnerDeclared.current = false;
     };
 
-    // ✅ FIXED: We pass the exact thought as an argument now to avoid scope issues
     const handleStatusUpdate = (thoughtText) => {
         setLastActivity(Date.now());
         if (ws.current && ws.current.readyState === WebSocket.OPEN && thoughtText.trim() !== "") {
@@ -578,9 +524,10 @@ export function useGameEngine(
     const submitScore = () => {
         setLastActivity(Date.now());
         let roundScore = isManualMath ? parseInt(mentalScore) || 0 : (parseInt(dutchCards) || 0) * 1 - (parseInt(blitzCards) || 0) * 2;
-        if (ws.current && ws.current.readyState === WebSocket.OPEN && !winner) {
+        // 🔥 MAGIA: Quitamos el `!winner` para que los perdedores puedan seguir enviando
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({ type: "score", username: username, roundScore: roundScore, isManual: isManualMath, dutch: isManualMath ? 0 : parseInt(dutchCards) || 0, blitz: isManualMath ? 0 : parseInt(blitzCards) || 0 }));
-            setLastSubmittedScore(roundScore); // 🔥 Guardamos el puntaje para poder deshacerlo
+            setLastSubmittedScore(roundScore);
             setBlitzCards(""); setDutchCards(""); setMentalScore("");
         }
     };
@@ -589,9 +536,8 @@ export function useGameEngine(
         if (lastSubmittedScore === null) return;
         setLastActivity(Date.now());
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            // Mandamos una alerta especial por el socket
             ws.current.send(JSON.stringify({ type: "undo_score", username: username, undoneScore: lastSubmittedScore }));
-            setLastSubmittedScore(null); // 🔥 Lo regresamos a null para que solo puedan deshacer 1 vez
+            setLastSubmittedScore(null);
         }
     };
 
@@ -602,11 +548,10 @@ export function useGameEngine(
             const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
             await fetch(`${apiBaseUrl}/rooms/${roomCode}`, { method: "DELETE" });
 
-            // Avisamos a todos los demás conectados que la sala murió
             if (ws.current && ws.current.readyState === WebSocket.OPEN) {
                 ws.current.send(JSON.stringify({ type: "room_deleted" }));
             }
-            leaveRoom(); // Nos salimos nosotros mismos
+            leaveRoom();
         } catch (error) { console.error("Failed to delete room:", error); }
     };
 

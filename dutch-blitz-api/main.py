@@ -140,18 +140,18 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                 
                 elif parsed.get("type") == "request_greeting":
                     user_name = parsed.get("username", "Un jugador")
-                    print(f"🤖 Pidiendo saludo a IA para: {user_name}") # <-- ESPÍA 1
+                    print(f"🤖 Pidiendo saludo a IA para: {user_name}") 
                     prompt = AI_SALUTE.format(user_name=user_name)
                     
                     try:
                         response = await client.chat.completions.create(
-                            model="llama-3.3-70b-versatile", # 🔥 Modelo pesado
+                            model="llama-3.3-70b-versatile",
                             messages=[{"role": "user", "content": prompt}],
-                            temperature=1.1, # 🔥 Más creatividad
+                            temperature=1.1,
                             max_tokens=25
                         )
                         ai_salute = response.choices[0].message.content.strip().replace('"', '')
-                        print(f"✅ Respuesta IA recibida: {ai_salute}") # <-- ESPÍA 2
+                        print(f"✅ Respuesta IA recibida: {ai_salute}") 
                     except Exception as e:
                         print(f"❌ Groq Salute Error: {e}")
                         ai_salute = "¡A llorar a la llorería! 🃏" 
@@ -161,7 +161,7 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                         "username": user_name,
                         "suggestion": ai_salute
                     }
-                    print(f"📡 Enviando por WebSocket: {broadcast_msg}") # <-- ESPÍA 3
+                    print(f"📡 Enviando por WebSocket: {broadcast_msg}")
                     await manager.broadcast(json.dumps(broadcast_msg), room_code)
                     continue
 
@@ -173,7 +173,6 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                         for s in scores_data
                     ])
                     
-                    # 🔥 NUEVO: Buscamos el historial reciente en la BD para darle contexto a la IA
                     history_context = "No previous history available."
                     try:
                         db_room_info = db.query(models.Room).filter(models.Room.room_code == room_code).first()
@@ -190,16 +189,22 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                         print(f"Error fetching history for AI context: {e}")
 
                     system_prompt = GAME_RECAP_PROMPT
-                    user_prompt_content = f"CURRENT MATCH STATS:\n{stats_string}\n\nRECENT HISTORY:\n{history_context}"
+                    user_prompt_content = f"""
+                    CURRENT MATCH STATS (ONLY NARRATE ABOUT THESE ACTIVE PLAYERS):
+                    {stats_string}
+
+                    RECENT HISTORY (FOR CONTEXT ONLY. DO NOT MENTION THESE PLAYERS IF THEY ARE NOT IN THE ACTIVE LIST ABOVE):
+                    {history_context}
+                    """
 
                     try:
                         response = await client.chat.completions.create(
-                            model="llama-3.3-70b-versatile", # 🔥 Modelo pesado
+                            model="llama-3.3-70b-versatile",
                             messages=[
                                 {"role": "system", "content": system_prompt},
                                 {"role": "user", "content": user_prompt_content}
                             ],
-                            temperature=1.1, # 🔥 Más caos y sarcasmo
+                            temperature=1.1,
                             max_tokens=200
                         )
                         recap_text = response.choices[0].message.content
@@ -241,38 +246,60 @@ async def generate_recap_image(req: ImageGenRequest):
         raise HTTPException(status_code=500, detail="Hugging Face API key missing")
 
     try:
-        # 1. Groq traduce el resumen chistoso a un Prompt Visual en Inglés
-        translator_prompt = f"""
-        Extract the core action from this Spanish game recap and turn it into a short, highly visual, dynamic image generation prompt in English. 
-        Style: Comic book illustration, chaotic, funny. 
-        Recap: "{req.recap_text}"
-        Output ONLY the English prompt, no explanations.
+        # 🔥 EL PROMPT MAESTRO (Comedia Épica Absurda, CERO Texto)
+        json_prompt = f"""
+        Analyze this game recap: "{req.recap_text}"
+
+        You must respond with a valid JSON object containing exactly 3 keys:
+        1. "flux_prompt": A highly detailed, absurdly epic and lmfao style image generation prompt in English. 
+           ART STYLE: Over-the-top, dynamic, epic showdown (think final boss battle).  Be randomly realistic.
+           ENVIRONMENT: Set the scene in a majestic or iconic Ecuadorian location (like the top of El Panecillo, Cotopaxi, or any actual and real Ecuadorian emblematic place/location; reflect the four regions: Sierra, Costa, Amazonía, Galápagos). Add a cartoon-ish local animal with confused face (like a sea lion, iguana, turtle, condor, cuy, alpaca, etc) or an animated Ecuadorian symbol/sign (like Inti Sun, Virgen Del Panecillo, The Monument to the Equator, Panama Hat, etc) watching the chaos if needed.
+           ACTION: Focus on the winning/losing players. The winner should look like an overpowered villain or superhero glowing with dramatic energy, while the losers are defeated in an annoyed way, like tired of the mockery and booing. Be creative and make it hilarious.
+           MANDATORY RULE: NO SPEECH BUBBLES, NO BALLOONS, NO WORDS, NO LETTERS, AND NO TEXT OF ANY KIND IN THE IMAGE.
+        2. "display_en": A punchy, short 1-sentence summary of the scene being drawn (in English, max 12 words).
+        3. "display_es": The exact same punchy summary translated to Spanish, using informal Quito/Ecuadorian slang (max 12 words).
+
+        Output ONLY the JSON object.
         """
+
         groq_response = await client.chat.completions.create(
-            model="llama-3.1-8b-instant", # Aquí el modelo rápido es perfecto
-            messages=[{"role": "user", "content": translator_prompt}],
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": json_prompt}],
             temperature=0.7,
-            max_tokens=50
+            response_format={"type": "json_object"} 
         )
-        visual_prompt = groq_response.choices[0].message.content.strip()
-        print(f"🎨 Prompt Visual Generado: {visual_prompt}")
+        
+        prompt_data = json.loads(groq_response.choices[0].message.content.strip())
+        flux_prompt = prompt_data.get("flux_prompt", "Comic book scene of players playing a game.")
+        display_en = prompt_data.get("display_en", "A chaotic card match.")
+        display_es = prompt_data.get("display_es", "Una partida loca, mi llave.")
 
+        print(f"🎨 FLUX Prompt (Para la IA): {flux_prompt}")
+
+        # 🔥 MODIFICACIÓN MINI: Usar la URL directa de FLUX por si tu .env tiene la antigua
+        HF_URL = os.getenv("HF_API_URL", "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell")
         headers = {"Authorization": f"Bearer {os.getenv('HF_API_KEY')}"}
-
+        
         async with httpx.AsyncClient(timeout=60.0) as http_client:
             image_res = await http_client.post(
-                os.getenv("HF_API_URL"), 
+                HF_URL, 
                 headers=headers, 
-                json={"inputs": visual_prompt}
+                json={"inputs": flux_prompt}
             )
             
             if image_res.status_code != 200:
                 print(f"HF Error: {image_res.text}")
                 raise HTTPException(status_code=500, detail="Image generation failed")
 
-            # 3. Convertimos la imagen a Base64 para mandarla directo al navegador
             base64_img = base64.b64encode(image_res.content).decode('utf-8')
-            return {"image_data": f"data:image/jpeg;base64,{base64_img}"}
+            
+            return {
+                "image_data": f"data:image/jpeg;base64,{base64_img}",
+                "visual_prompt": {
+                    "en": display_en,
+                    "es": display_es
+                }
+            }
 
     except Exception as e:
         print(f"Error en generación de imagen: {e}")

@@ -25,7 +25,9 @@ export const dict = {
       saveBtn: "Save & Broadcast",
       managePlayers: "Manage Players (Kick Ghosts)",
       noPlayers: "No players available to kick.",
-      kickBtn: "Kick"
+      kickBtn: "Kick",
+      dangerZone: "DANGER ZONE",
+      deleteRoom: "Delete Room & History"
     },
     score: {
       inputMethod: "Score Input Method",
@@ -79,7 +81,9 @@ export const dict = {
       saveBtn: "Guardar y Avisar",
       managePlayers: "Gestionar Jugadores (Expulsar)",
       noPlayers: "No hay jugadores para expulsar.",
-      kickBtn: "Echar"
+      kickBtn: "Echar",
+      dangerZone: "ZONA DE PELIGRO",
+      deleteRoom: "Eliminar Sala e Historial"
     },
     score: {
       inputMethod: "Método de Puntaje",

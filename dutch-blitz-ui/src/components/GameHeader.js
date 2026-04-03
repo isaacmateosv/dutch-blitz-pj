@@ -63,7 +63,7 @@ export default function GameHeader({
                     onClick={toggleLang}
                     className="bg-neutral-800 hover:bg-neutral-700 w-8 h-8 rounded-full transition flex items-center justify-center text-sm shadow-sm border border-neutral-700"
                 >
-                    {lang === 'en' ? '🇺🇸' : '🇪🇸'}
+                    {lang === 'en' ? '🇬🇧' : '🇪🇸'}
                 </button>
                 <button
                     onClick={() => setShowSettings(!showSettings)}
