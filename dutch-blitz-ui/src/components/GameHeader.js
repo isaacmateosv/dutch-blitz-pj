@@ -32,18 +32,25 @@ export default function GameHeader({
                         </span>
                     )}
                 </div>
-                {/* 1-TAP SHARE BUTTON */}
+                {/* 🔥 FIX: 1-TAP SHARE BUTTON (Ahora copia la URL completa) */}
                 <h2
                     onClick={() => {
+                        // Generamos el link mágico usando la URL actual de tu web
+                        const inviteLink = `${window.location.origin}/?room=${roomCode}`;
+
                         if (navigator.share) {
-                            navigator.share({ title: 'Dutch Blitz PJ', text: `Join my room: "${roomCode}"` });
+                            navigator.share({
+                                title: 'BlitzRoom',
+                                text: `Join my room: "${roomCode}"`,
+                                url: inviteLink
+                            }).catch(console.error); // Silenciamos si el usuario cancela
                         } else {
-                            navigator.clipboard.writeText(roomCode);
-                            alert("Code copied!");
+                            navigator.clipboard.writeText(inviteLink);
+                            alert("Invite link copied!");
                         }
                     }}
                     className="text-xl md:text-2xl font-black tracking-wider uppercase text-white cursor-pointer hover:scale-105 transition active:scale-95 flex items-center gap-2"
-                    title="Click to share room code"
+                    title="Click to share room link"
                 >
                     {t.header.room} <span className="text-[#fbd304]">{roomCode}</span> <span className="text-sm opacity-50">🔗</span>
                 </h2>

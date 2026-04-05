@@ -3,15 +3,19 @@ import os
 from fastapi import APIRouter, FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from socket_manager import manager
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 import models
 from database import engine, SessionLocal, get_db
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from prompts import GAME_RECAP_PROMPT, AI_SALUTE
-import base64
-import httpx
+import urllib.parse
+import random
+import traceback
+import re
+
+from fastapi.responses import JSONResponse
 
 # 🔥 1. IMPORT THE NEW ROUTER
 from routers import rooms
@@ -50,7 +54,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 🔥 2. REGISTER THE ROUTER WITH FASTAPI
 app.include_router(rooms.router)
 
 @app.post("/users/")
@@ -67,35 +70,44 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/game/recap/")
 def save_game_recap(recap: MatchRecapRequest, db: Session = Depends(get_db)):
-    db_room = db.query(models.Room).filter(models.Room.room_code == recap.room_code).first()
-    if not db_room:
-        db_room = models.Room(room_code=recap.room_code, status="finished")
-        db.add(db_room)
-        db.commit()
-        db.refresh(db_room)
-    else:
-        db_room.status = "finished"
-
-    for stat in recap.scores:
-        user = db.query(models.User).filter(models.User.username == stat.player_name).first()
-        if not user:
-            user = models.User(username=stat.player_name)
-            db.add(user)
+    # 🔥 FIX: Todo indentado correctamente dentro del try
+    try:
+        db_room = db.query(models.Room).filter(models.Room.room_code == recap.room_code).first()
+        if not db_room:
+            db_room = models.Room(room_code=recap.room_code, status="finished")
+            db.add(db_room)
             db.commit()
-            db.refresh(user)
-        
-        new_score = models.Score(
-            room_id=db_room.id,
-            player_name=stat.player_name,
-            total_score=stat.total_score,
-            round_number=stat.round_number,
-            blitz_pile_cards=stat.blitz_pile_cards,
-            dutch_pile_cards=stat.dutch_pile_cards
-        )
-        db.add(new_score)
+            db.refresh(db_room)
+        else:
+            db_room.status = "finished"
 
-    db.commit()
-    return {"status": "success", "message": "Match results archived!"}
+        for stat in recap.scores:
+            user = db.query(models.User).filter(models.User.username == stat.player_name).first()
+            if not user:
+                user = models.User(username=stat.player_name)
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            
+            new_score = models.Score(
+                room_id=db_room.id,
+                player_name=stat.player_name,
+                total_score=stat.total_score,
+                round_number=stat.round_number,
+                blitz_pile_cards=stat.blitz_pile_cards,
+                dutch_pile_cards=stat.dutch_pile_cards
+            )
+            db.add(new_score)
+
+        db.commit()
+        return {"status": "success", "message": "Match results archived!"}
+    
+    # 🔥 FIX: El bloque except que faltaba para evitar el crash y el falso CORS
+    except Exception as e:
+        db.rollback()
+        trace = traceback.format_exc()
+        print(f"🔥 ERROR EN RECAP: {trace}")
+        return JSONResponse(status_code=400, content={"detail": str(e), "trace": trace})
 
 @app.websocket("/ws/{room_code}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str, email: str = None, db: Session = Depends(get_db)):
@@ -140,7 +152,6 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                 
                 elif parsed.get("type") == "request_greeting":
                     user_name = parsed.get("username", "Un jugador")
-                    print(f"🤖 Pidiendo saludo a IA para: {user_name}") 
                     prompt = AI_SALUTE.format(user_name=user_name)
                     
                     try:
@@ -151,9 +162,7 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                             max_tokens=25
                         )
                         ai_salute = response.choices[0].message.content.strip().replace('"', '')
-                        print(f"✅ Respuesta IA recibida: {ai_salute}") 
                     except Exception as e:
-                        print(f"❌ Groq Salute Error: {e}")
                         ai_salute = "¡A llorar a la llorería! 🃏" 
 
                     broadcast_msg = {
@@ -161,7 +170,6 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                         "username": user_name,
                         "suggestion": ai_salute
                     }
-                    print(f"📡 Enviando por WebSocket: {broadcast_msg}")
                     await manager.broadcast(json.dumps(broadcast_msg), room_code)
                     continue
 
@@ -209,7 +217,6 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                         )
                         recap_text = response.choices[0].message.content
                     except Exception as e:
-                        print(f"Groq API Error: {e}")
                         recap_text = "**🎙️ AI Announcer:** Error de conexión con el estudio. ¡Pero vaya partida acabamos de presenciar! Felicidades al campeón."
 
                     broadcast_msg = {
@@ -219,7 +226,6 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
                     await manager.broadcast(json.dumps(broadcast_msg), room_code)
                     continue
             except Exception as parse_error:
-                print(f"Parse error: {parse_error}")
                 pass
                 
             await manager.broadcast(data, room_code)
@@ -236,26 +242,30 @@ async def websocket_endpoint(websocket: WebSocket, room_code: str, username: str
         if player_count > 0:
             await manager.broadcast(json.dumps(leave_message), room_code)
 
+# ==============================================================
+# 🔥 NUEVA SECCIÓN: GALERÍA HISTÓRICA E IMÁGENES
+# ==============================================================
 
 class ImageGenRequest(BaseModel):
     recap_text: str
+    room_code: str 
+
+class ReactionRequest(BaseModel):
+    username: str
+    reaction_emoji: str
 
 @app.post("/game/recap/image/")
-async def generate_recap_image(req: ImageGenRequest):
-    if not os.getenv("HF_API_KEY"):
-        raise HTTPException(status_code=500, detail="Hugging Face API key missing")
-
+async def generate_recap_image(req: ImageGenRequest, db: Session = Depends(get_db)):
     try:
-        # 🔥 EL PROMPT MAESTRO (Comedia Épica Absurda, CERO Texto)
         json_prompt = f"""
         Analyze this game recap: "{req.recap_text}"
 
         You must respond with a valid JSON object containing exactly 3 keys:
-        1. "flux_prompt": A highly detailed, absurdly epic and lmfao style image generation prompt in English. 
-           ART STYLE: Over-the-top, dynamic, epic showdown (think final boss battle).  Be randomly realistic.
-           ENVIRONMENT: Set the scene in a majestic or iconic Ecuadorian location (like the top of El Panecillo, Cotopaxi, or any actual and real Ecuadorian emblematic place/location; reflect the four regions: Sierra, Costa, Amazonía, Galápagos). Add a cartoon-ish local animal with confused face (like a sea lion, iguana, turtle, condor, cuy, alpaca, etc) or an animated Ecuadorian symbol/sign (like Inti Sun, Virgen Del Panecillo, The Monument to the Equator, Panama Hat, etc) watching the chaos if needed.
-           ACTION: Focus on the winning/losing players. The winner should look like an overpowered villain or superhero glowing with dramatic energy, while the losers are defeated in an annoyed way, like tired of the mockery and booing. Be creative and make it hilarious.
-           MANDATORY RULE: NO SPEECH BUBBLES, NO BALLOONS, NO WORDS, NO LETTERS, AND NO TEXT OF ANY KIND IN THE IMAGE.
+        1. "flux_prompt": A highly detailed, absurdly epic and hilarious image generation prompt in English. 
+           ART STYLE: Over-the-top, dynamic comic book or epic anime showdown. 
+           ENVIRONMENT: Set the scene in a majestic or iconic Ecuadorian location. Add a confused local animal watching the chaos.
+           ACTION: Focus on the winning/losing players.
+           MANDATORY RULE: ABSOLUTELY NO SPEECH BUBBLES, NO WORDS, NO LETTERS IN THE IMAGE.
         2. "display_en": A punchy, short 1-sentence summary of the scene being drawn (in English, max 12 words).
         3. "display_es": The exact same punchy summary translated to Spanish, using informal Quito/Ecuadorian slang (max 12 words).
 
@@ -270,37 +280,120 @@ async def generate_recap_image(req: ImageGenRequest):
         )
         
         prompt_data = json.loads(groq_response.choices[0].message.content.strip())
-        flux_prompt = prompt_data.get("flux_prompt", "Comic book scene of players playing a game.")
-        display_en = prompt_data.get("display_en", "A chaotic card match.")
-        display_es = prompt_data.get("display_es", "Una partida loca, mi llave.")
+        flux_prompt = prompt_data.get("flux_prompt", "Comic book scene.")
+        display_en = prompt_data.get("display_en", "A chaotic match.")
+        display_es = prompt_data.get("display_es", "Una partida loca.")
 
-        print(f"🎨 FLUX Prompt (Para la IA): {flux_prompt}")
-
-        # 🔥 MODIFICACIÓN MINI: Usar la URL directa de FLUX por si tu .env tiene la antigua
-        HF_URL = os.getenv("HF_API_URL", "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell")
-        headers = {"Authorization": f"Bearer {os.getenv('HF_API_KEY')}"}
+        clean_prompt = re.sub(r'[^a-zA-Z0-9\s]', '', flux_prompt).strip()
+        clean_prompt = clean_prompt[:200]
+        encoded_prompt = urllib.parse.quote(clean_prompt)
         
-        async with httpx.AsyncClient(timeout=60.0) as http_client:
-            image_res = await http_client.post(
-                HF_URL, 
-                headers=headers, 
-                json={"inputs": flux_prompt}
+        seed = random.randint(1, 1000000)
+        
+        # 🔥 LA URL CORRECTA PARA LA API DE IMÁGENES:
+        pollinations_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}"
+
+        # 🔥 MAGIA DE DEBUGGING: Imprimimos la URL en tu terminal
+        print(f"\n=======================================================")
+        print(f"🖼️ DALE CLIC A ESTE LINK PARA VER SI FUNCIONA:")
+        print(f"{pollinations_url}")
+        print(f"=======================================================\n")
+
+        # GUARDAR EN BASE DE DATOS
+        db_room = db.query(models.Room).filter(models.Room.room_code == req.room_code).first()
+
+        new_image_id = None
+        if db_room:
+            new_image = models.GalleryImage(
+                room_id=db_room.id,
+                image_url=pollinations_url,
+                prompt_en=display_en,
+                prompt_es=display_es
             )
-            
-            if image_res.status_code != 200:
-                print(f"HF Error: {image_res.text}")
-                raise HTTPException(status_code=500, detail="Image generation failed")
+            db.add(new_image)
+            db.commit()
+            db.refresh(new_image)
+            new_image_id = new_image.id
 
-            base64_img = base64.b64encode(image_res.content).decode('utf-8')
-            
-            return {
-                "image_data": f"data:image/jpeg;base64,{base64_img}",
-                "visual_prompt": {
-                    "en": display_en,
-                    "es": display_es
-                }
+        return {
+            "image_id": new_image_id,
+            "image_data": pollinations_url,
+            "visual_prompt": {
+                "en": display_en,
+                "es": display_es
             }
+        }
 
+    # 🔥 FIX: El bloque except que faltaba para evitar el falso CORS aquí también
     except Exception as e:
-        print(f"Error en generación de imagen: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        db.rollback()
+        trace = traceback.format_exc()
+        print(f"🔥 ERROR EN IMAGEN: {trace}")
+        return JSONResponse(status_code=400, content={"detail": str(e), "trace": trace})
+
+@app.get("/rooms/{room_code}/gallery/")
+def get_room_gallery(room_code: str, db: Session = Depends(get_db)):
+    try:
+        db_room = db.query(models.Room).filter(models.Room.room_code == room_code).first()
+        if not db_room:
+            return [] 
+
+        images = db.query(models.GalleryImage).filter(
+            models.GalleryImage.room_id == db_room.id
+        ).options(joinedload(models.GalleryImage.votes)).order_by(models.GalleryImage.created_at.desc()).all()
+
+        gallery_data = []
+        for img in images:
+            reactions = {}
+            for vote in img.votes:
+                emoji = vote.reaction_emoji
+                reactions[emoji] = reactions.get(emoji, 0) + 1
+
+            gallery_data.append({
+                "id": img.id,
+                "url": img.image_url,
+                "prompt_en": img.prompt_en,
+                "prompt_es": img.prompt_es,
+                "created_at": img.created_at,
+                "reactions": reactions,
+                "raw_votes": [{"user": v.username, "emoji": v.reaction_emoji} for v in img.votes]
+            })
+        
+        return gallery_data
+    except Exception as e:
+        print(f"🔥 Error en Galería: {e}")
+        return []
+
+@app.post("/gallery/{image_id}/react/")
+def toggle_reaction(image_id: int, req: ReactionRequest, db: Session = Depends(get_db)):
+    try:
+        image = db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id).first()
+        if not image:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        existing_vote = db.query(models.ImageVote).filter(
+            models.ImageVote.image_id == image_id,
+            models.ImageVote.username == req.username,
+            models.ImageVote.reaction_emoji == req.reaction_emoji
+        ).first()
+
+        action = ""
+        if existing_vote:
+            db.delete(existing_vote)
+            action = "removed"
+        else:
+            new_vote = models.ImageVote(
+                image_id=image_id,
+                username=req.username,
+                reaction_emoji=req.reaction_emoji
+            )
+            db.add(new_vote)
+            action = "added"
+
+        db.commit()
+        return {"status": "success", "action": action, "emoji": req.reaction_emoji}
+    except Exception as e:
+        db.rollback()
+        trace = traceback.format_exc()
+        print(f"🔥 ERROR EN REACCIÓN: {trace}")
+        return JSONResponse(status_code=400, content={"detail": str(e), "trace": trace})

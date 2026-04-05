@@ -136,7 +136,6 @@ export default function ScorePanel({
               <div className="flex-1 min-w-0">
                 <label className="block text-[10px] md:text-xs text-neutral-400 mb-1 truncate">{t.score.totalRound}</label>
 
-                {/* 🔥 MAGIA UX: Box Dinámico (Verde/Rojo) */}
                 <div className={`flex bg-neutral-950 rounded-lg border transition-all overflow-hidden ${(mentalScore === "-" || mentalScore < 0) ? 'border-red-900/50 focus-within:border-red-500' : 'border-emerald-900/50 focus-within:border-emerald-500'
                   }`}>
                   <button
@@ -145,46 +144,55 @@ export default function ScorePanel({
                     onClick={() => {
                       if (mentalScore === "") setMentalScore("-");
                       else if (mentalScore === "-") setMentalScore("");
-                      else setMentalScore(mentalScore * -1);
+                      else {
+                        // 🔥 BLINDAJE ABSOLUTO: Limitamos después de multiplicar
+                        let num = parseInt(mentalScore) * -1;
+                        if (isNaN(num)) num = 0;
+                        if (num > 40) num = 40;
+                        if (num < -20) num = -20;
+                        setMentalScore(num.toString());
+                      }
                     }}
                     title="Toggle Negative/Positive"
                   >
                     +/-
                   </button>
                   <input
-                    type="text" // 🔥 FIX 1: Cambiamos "number" por "text"
+                    type="text"
                     inputMode="numeric"
-                    pattern="[0-9\-]*" // 🔥 FIX 2: Le decimos al teclado que acepte guiones
-                    className={`w-full p-2 md:p-3 bg-transparent font-bold text-sm md:text-base focus:outline-none ${(mentalScore === "-" || mentalScore < 0) ? 'text-red-400' : 'text-emerald-400'
+                    pattern="[0-9\-]*"
+                    // 🔥 UX: text-[16px] EVITA EL ZOOM EN MÓVILES
+                    className={`w-full p-2 md:p-3 bg-transparent font-bold text-[16px] md:text-base focus:outline-none ${(mentalScore === "-" || mentalScore < 0) ? 'text-red-400' : 'text-emerald-400'
                       }`}
                     value={mentalScore}
                     onChange={(e) => {
                       const val = e.target.value;
-                      // Permitimos que el guion exista pacíficamente
                       if (val === "" || val === "-") { setMentalScore(val); return; }
 
-                      // Limpiamos letras por si el usuario está en PC y presiona el teclado normal
                       const cleanVal = val.replace(/[^-0-9]/g, '');
                       let num = parseInt(cleanVal);
 
                       if (isNaN(num)) return;
                       if (num > 40) num = 40;
                       if (num < -20) num = -20;
-                      setMentalScore(num)
+                      setMentalScore(num.toString()); // 🔥 Blindado al escribir
                     }}
                     onKeyDown={(e) => {
-                      // Sigue funcionando la magia de invertir el signo al teclear '-'
                       if (e.key === '-') {
                         e.preventDefault();
                         if (mentalScore === "") setMentalScore("-");
                         else if (mentalScore === "-") setMentalScore("");
-                        else setMentalScore(mentalScore * -1);
+                        else {
+                          let num = parseInt(mentalScore) * -1;
+                          if (num > 40) num = 40;
+                          if (num < -20) num = -20;
+                          setMentalScore(num.toString()); // 🔥 Blindado en teclado físico
+                        }
                         return;
                       }
                       if (['e', 'E', '+', '.', '&'].includes(e.key)) e.preventDefault();
                       if (e.key === 'Enter') submitScore();
                     }}
-                    placeholder="e.g. 14"
                   />
                 </div>
               </div>

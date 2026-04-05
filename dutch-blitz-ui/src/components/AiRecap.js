@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-export default function AiRecap({ t, lang, aiEnabled, isGenerating, generateAIRecap, recap }) {
+export default function AiRecap({ t, lang, aiEnabled, isGenerating, generateAIRecap, recap, roomCode }) {
   const [imageUrl, setImageUrl] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [visualPrompt, setVisualPrompt] = useState(null);
@@ -10,7 +10,6 @@ export default function AiRecap({ t, lang, aiEnabled, isGenerating, generateAIRe
     setVisualPrompt(null);
   }, [recap]);
 
-  // Si la IA está apagada, esto ni siquiera se renderiza (oculta el feature de imagen también)
   if (!aiEnabled) return null;
 
   const requestImage = async () => {
@@ -20,7 +19,8 @@ export default function AiRecap({ t, lang, aiEnabled, isGenerating, generateAIRe
       const response = await fetch(`${apiBaseUrl}/game/recap/image/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recap_text: recap })
+        // 🔥 FIX 2: ¡Aquí enviamos el room_code al backend!
+        body: JSON.stringify({ recap_text: recap, room_code: roomCode })
       });
 
       if (response.ok) {

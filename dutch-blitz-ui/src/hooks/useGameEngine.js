@@ -88,7 +88,7 @@ export function useGameEngine(
             const savedStatuses = sessionStorage.getItem("blitzStatuses");
             if (savedStatuses) {
                 const parsedStatuses = JSON.parse(savedStatuses);
-                parsedStatuses[savedUser] = t?.system?.contacting || "...";;
+                parsedStatuses[savedUser] = t?.system?.contacting || "...";
                 setPlayerStatuses(parsedStatuses);
             }
 
@@ -111,7 +111,7 @@ export function useGameEngine(
             isInRoomRef.current = true;
 
             setMyThought("");
-            setSuggestedThought(t?.system?.contacting || "Contactando...");
+            setSuggestedThought(t?.system?.contacting || "...");
 
             connectWebSocket(savedRoom, savedUser);
             fetchHistory(savedRoom);
@@ -323,8 +323,8 @@ export function useGameEngine(
                 }
                 else if (data.type === "pong") return;
                 else if (data.type === "status_update") {
+                    // 🔥 FIX: Eliminado el setMyThought que forzaba el input a llenarse
                     setPlayerStatuses(prev => ({ ...prev, [data.username]: data.status }));
-                    if (data.username === currentUser) setMyThought(data.status);
                 }
                 else if (data.type === "kick_player") {
                     setPlayerScores(prev => { const n = { ...prev }; delete n[data.target]; return n; });
@@ -344,9 +344,15 @@ export function useGameEngine(
                     setPlayerReady({});
                     setWinner(null);
                     winnerDeclared.current = false;
+
+                    // 🔥 FIX: Le borramos la memoria al botón para que 
+                    // sea IMPOSIBLE deshacer un puntaje de la partida anterior.
+                    setLastSubmittedScore(null);
+
                     appendMsg(`🔄 ${data.username} restarted the game! All scores reset to 0.`);
                     playRoundStartSound();
                 }
+
                 else if (data.type === "score") {
                     const currentScore = playerScoresRef.current[data.username] || 0;
                     const newTotal = currentScore + data.roundScore;
@@ -507,7 +513,9 @@ export function useGameEngine(
                 body: JSON.stringify({ room_code: roomCode, scores: formattedScores })
             });
             fetchHistory();
-        } catch (error) { console.error("🚨 DB save failed, but game continues:", error); }
+        } catch (error) {
+            console.warn("Aviso silencioso: Error de guardado de Recap, pero el juego sigue.");
+        }
 
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({ type: "request_ai_recap", scores: formattedScores }));
@@ -524,7 +532,6 @@ export function useGameEngine(
     const submitScore = () => {
         setLastActivity(Date.now());
         let roundScore = isManualMath ? parseInt(mentalScore) || 0 : (parseInt(dutchCards) || 0) * 1 - (parseInt(blitzCards) || 0) * 2;
-        // 🔥 MAGIA: Quitamos el `!winner` para que los perdedores puedan seguir enviando
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             ws.current.send(JSON.stringify({ type: "score", username: username, roundScore: roundScore, isManual: isManualMath, dutch: isManualMath ? 0 : parseInt(dutchCards) || 0, blitz: isManualMath ? 0 : parseInt(blitzCards) || 0 }));
             setLastSubmittedScore(roundScore);
@@ -541,18 +548,21 @@ export function useGameEngine(
         }
     };
 
-    const destroyRoom = async () => {
+    const destroyRoom = () => {
         if (!confirm("Are you sure? This will permanently delete the room and all its history for everyone.")) return;
+
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ type: "room_deleted" }));
+        }
+
+        leaveRoom();
 
         try {
             const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
-            await fetch(`${apiBaseUrl}/rooms/${roomCode}`, { method: "DELETE" });
-
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                ws.current.send(JSON.stringify({ type: "room_deleted" }));
-            }
-            leaveRoom();
-        } catch (error) { console.error("Failed to delete room:", error); }
+            fetch(`${apiBaseUrl}/rooms/${roomCode}`, { method: "DELETE" });
+        } catch (error) {
+            console.error("Failed to delete room:", error);
+        }
     };
 
     return {

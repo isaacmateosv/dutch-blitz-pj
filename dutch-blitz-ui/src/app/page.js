@@ -11,6 +11,7 @@ import GameHeader from "../components/GameHeader";
 import Leaderboard from "../components/Leaderboard";
 import { useGameEngine } from "../hooks/useGameEngine";
 import { dict } from "../locales/dictionary";
+import HistoricalGallery from "../components/HistoricalGallery";
 
 const EMOJIS = ["👾", "🦊", "🐶", "🐱", "🐰", "🐼", "🐯", "🐸", "🦄", "👽", "👻", "🤖", "🤡", "👹", "👑", "🔥", "🐳", "🫍", "💯", "💩", "💀", "🐢", "🐺", "🦖", "🐝"];
 
@@ -22,7 +23,6 @@ const getUserColor = (name) => {
 };
 
 export default function Home() {
-  // 1. DUMB UI STATES (Only related to rendering visual elements)
   const [lang, setLang] = useState("en");
   const t = dict[lang] || dict["en"];
   const [showSettings, setShowSettings] = useState(false);
@@ -33,7 +33,6 @@ export default function Home() {
   const [myThought, setMyThought] = useState("");
   const [inactivityAlert, setInactivityAlert] = useState("");
 
-  // 2. SHARED STATES (Passed into the engine)
   const [isInRoom, setIsInRoom] = useState(false);
   const [username, setUsername] = useState("");
   const [roomCode, setRoomCode] = useState("");
@@ -43,6 +42,15 @@ export default function Home() {
     setRecentRooms(JSON.parse(localStorage.getItem("blitzRoomHistory") || "[]"));
     const savedLang = localStorage.getItem("blitzLang");
     if (savedLang) setLang(savedLang);
+
+    // 🔥 FIX: Capturamos el link mágico (ej. /?room=SVA)
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomFromUrl = urlParams.get('room');
+      if (roomFromUrl) {
+        setRoomCode(roomFromUrl.toUpperCase());
+      }
+    }
   }, []);
 
   const toggleLang = () => {
@@ -56,10 +64,11 @@ export default function Home() {
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:8000`;
       const response = await fetch(`${apiBaseUrl}/rooms/${code}/history/`);
       if (response.ok) setMatchHistory(await response.json());
-    } catch (error) { console.error("Failed to load history"); }
+    } catch (error) {
+      // Silenciado intencionalmente para evitar logs en rojo cuando la DB es nueva
+    }
   };
 
-  // 🚀 3. THE GAME ENGINE (Handles all logic, WebSockets, and heavy state)
   const engine = useGameEngine(
     username, setUsername,
     roomCode, setRoomCode,
@@ -67,13 +76,12 @@ export default function Home() {
     setMyThought,
     recentRooms, setRecentRooms,
     fetchHistory, setInactivityAlert,
-    15 * 60 * 1000
+    15 * 60 * 1000,
+    t // 🔥 Aseguramos pasarle el diccionario al engine
   );
 
-  // Grab the auth state from the engine
   const authUser = engine.authUser;
 
-  // ⏳ Timeout Watcher
   useEffect(() => {
     if (!isInRoom) return;
     const timer = setTimeout(() => {
@@ -97,14 +105,16 @@ export default function Home() {
     );
   }
 
-  // 🔥 NUEVO: Chequeamos si al menos un jugador tiene un puntaje diferente de 0
-  const hasScores = Object.values(engine.playerScores).some(score => score !== 0);
+  const playersList = Object.keys(engine.playerScores);
+  const isEveryoneReady = playersList.length > 0 && playersList.every(p => engine.playerReady[p]);
+
+  // 🔥 FIX: El Recap (dibujar la partida) solo se muestra si hay un ganador.
+  const showRecap = engine.winner !== null;
 
   return (
     <div className="min-h-screen bg-neutral-950 p-4 md:p-8 text-white flex justify-center relative">
       <div className="w-full max-w-2xl flex flex-col gap-5">
 
-        {/* 1. HEADER (Limpio, solo información) */}
         <div className="flex flex-col border-b border-neutral-800/60 pb-4 gap-4">
           <GameHeader
             t={t} roomCode={roomCode} targetScore={engine.targetScore} onlineCount={engine.onlineCount}
@@ -114,44 +124,49 @@ export default function Home() {
           />
         </div>
 
-        {/* 2. LEADERBOARD (Los avatares y puntajes actuales) */}
         <Leaderboard playerScores={engine.playerScores} playerStatuses={engine.playerStatuses} username={username} getUserColor={getUserColor} t={t} />
 
-        {/* 3. INPUT DE PENSAMIENTO (Anclado visualmente al Leaderboard) */}
-        <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-full px-4 py-2 shadow-inner w-full mb-2">
-          <span className="text-sm mr-3 opacity-70">💭</span>
-          <input
-            type="text" maxLength={40}
-            placeholder={engine.suggestedThought || t.header.thoughtPlaceholder}
-            className="bg-transparent text-sm focus:outline-none flex-grow text-purple-200 placeholder-purple-400/40 w-full"
-            value={myThought} onChange={(e) => setMyThought(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+        {/* 🔥 FIX: La caja de pensamiento solo sale si TODOS están listos y el juego NO ha terminado */}
+        {(isEveryoneReady && !showRecap) && (
+          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-full px-4 py-2 shadow-inner w-full mb-2">
+            <span className="text-sm mr-3 opacity-70">💭</span>
+            <input
+              type="text" maxLength={40}
+              placeholder={engine.suggestedThought || t.header.thoughtPlaceholder}
+              className="bg-transparent text-sm focus:outline-none flex-grow text-purple-200 placeholder-purple-400/40 w-full"
+              value={myThought}
+              onChange={(e) => setMyThought(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
+                  if (textToSend) {
+                    engine.handleStatusUpdate(textToSend);
+                    setMyThought("");
+                    engine.setSuggestedThought("");
+                  }
+                }
+              }}
+            />
+            <button
+              onClick={() => {
                 const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
                 if (textToSend) {
                   engine.handleStatusUpdate(textToSend);
                   setMyThought("");
                   engine.setSuggestedThought("");
                 }
-              }
-            }}
-          />
-          <button
-            onClick={() => {
-              const textToSend = myThought.trim() !== "" ? myThought : engine.suggestedThought;
-              if (textToSend) {
-                engine.handleStatusUpdate(textToSend);
-                setMyThought("");
-                engine.setSuggestedThought("");
-              }
-            }}
-            className="bg-purple-600/80 hover:bg-purple-500 text-purple-100 text-xs px-4 py-1.5 rounded-full font-bold transition ml-2 tracking-wide shadow-md border border-purple-500/50"
-          >
-            {t.header.setBtn}
-          </button>
-        </div>
+              }}
+              disabled={myThought.trim() === "" && engine.suggestedThought === ""}
+              className={`text-xs px-4 py-1.5 rounded-full font-bold transition ml-2 tracking-wide shadow-md border ${(myThought.trim() === "" && engine.suggestedThought === "")
+                ? 'bg-neutral-800 text-neutral-500 border-neutral-700 cursor-not-allowed opacity-70'
+                : 'bg-purple-600/80 hover:bg-purple-500 text-purple-100 border-purple-500/50'
+                }`}
+            >
+              {t.header.setBtn}
+            </button>
+          </div>
+        )}
 
-        {/* MODAL DE AJUSTES */}
         {showSettings && (
           <RoomSettings
             t={t} currentTargetScore={engine.targetScore} currentAiEnabled={engine.aiEnabled} winner={engine.winner}
@@ -162,12 +177,10 @@ export default function Home() {
           />
         )}
 
-        {/* 🔥 4. CHATBOX (Aparece SOLO si hay mensajes, y va ARRIBA de los controles) */}
         {engine.messages.length > 0 && (
           <ChatBox messages={engine.messages} playerScores={engine.playerScores} getUserColor={getUserColor} />
         )}
 
-        {/* 🔥 5. SCORE PANEL (El "teclado" del juego, va ABAJO de los mensajes) */}
         <ScorePanel
           t={t} isManualMath={engine.isManualMath} setIsManualMath={engine.setIsManualMath}
           mentalScore={engine.mentalScore} setMentalScore={engine.setMentalScore}
@@ -178,12 +191,26 @@ export default function Home() {
           undoScore={engine.undoScore}
         />
 
-        {/* 6. AI RECAP & MATCH HISTORY */}
-        {hasScores && (
-          <AiRecap t={t} lang={lang} aiEnabled={engine.aiEnabled} isGenerating={engine.isGenerating} generateAIRecap={engine.generateAIRecap} recap={engine.recap} />
+        {/* 🔥 FIX: El generador de IA ahora SOLO aparece al finalizar la partida */}
+        {showRecap && (
+          <AiRecap
+            t={t} lang={lang} aiEnabled={engine.aiEnabled}
+            isGenerating={engine.isGenerating} generateAIRecap={engine.generateAIRecap}
+            recap={engine.recap}
+            roomCode={roomCode}
+          />
         )}
 
         <MatchHistory t={t} history={matchHistory} getUserColor={getUserColor} />
+
+        <HistoricalGallery
+          t={t}
+          roomCode={roomCode}
+          username={username}
+          playerScores={engine.playerScores}
+          lang={lang}
+        />
+
       </div>
     </div>
   );
