@@ -19,3 +19,6 @@ jobs:
       - name: Ping Render Backend
         run: |
           curl -s "https://dutch-blitz-pj.onrender.com/health"
+
+      - name: Keepalive Workflow
+        uses: gautamkrishnar/keepalive-workflow@v2
