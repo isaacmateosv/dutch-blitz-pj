@@ -1,0 +1,21 @@
+name: Jitter Ping Keep-Alive
+
+on:
+  schedule:
+    - cron: '*/13 * * * *'
+  workflow_dispatch: 
+
+jobs:
+  ping-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Humanized Random Delay
+        run: |
+          # Random num 1 - 120 sec
+          DELAY=$((RANDOM % 120 + 1))
+          echo "Waiting $DELAY sec(s)"
+          sleep $DELAY
+
+      - name: Ping Render Backend
+        run: |
+          curl -s "https://dutch-blitz-pj.onrender.com/health"
