@@ -7,7 +7,6 @@ export default function RoomSettings({
     const [draftScore, setDraftScore] = useState(currentTargetScore);
     const [draftAi, setDraftAi] = useState(currentAiEnabled);
 
-    // 🔥 LÓGICA: ¿Hay cambios sin guardar?
     const hasChanges = draftScore !== currentTargetScore || draftAi !== currentAiEnabled;
 
     return (

@@ -3,7 +3,10 @@ import os
 from fastapi import APIRouter, FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from socket_manager import manager
+
+from sqlalchemy import text 
 from sqlalchemy.orm import Session, joinedload
+
 from pydantic import BaseModel
 import models
 from database import engine, SessionLocal, get_db
@@ -45,6 +48,11 @@ class UserCreate(BaseModel):
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "awake", "message": "El dragón está despierto 🐉"}
 
 app.add_middleware(
     CORSMiddleware,

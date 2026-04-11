@@ -1,6 +1,7 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from '../contexts/ToastContext';
+import { Analytics } from "@vercel/analytics/next"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -15,7 +16,6 @@ export const metadata = {
   }
 };
 
-// NEW: Next.js now requires themeColor to be exported here!
 export const viewport = {
   themeColor: "#059669",
 };
